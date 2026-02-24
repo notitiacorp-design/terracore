@@ -188,7 +188,7 @@ export default function DocumentsPage() {
         .order('created_at', { ascending: false });
 
       if (search.trim()) {
-        query = query.ilike('reference', `%${search.trim()}%`);
+        // Search filtered client-side (deposit_invoice has no reference)
       }
 
       const { data, error } = await query;
