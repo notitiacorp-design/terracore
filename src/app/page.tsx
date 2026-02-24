@@ -1,24 +1,31 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
-export default async function HomePage() {
-  const supabase = await createClient();
+export default function HomePage() {
+  const router = useRouter();
 
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
+  useEffect(() => {
+    const checkSession = async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-  if (error) {
-    console.error("Session error on home page:", error);
-    redirect("/login");
-  }
+      if (session) {
+        router.replace("/dashboard");
+      } else {
+        router.replace("/login");
+      }
+    };
+    checkSession();
+  }, [router]);
 
-  if (session) {
-    redirect("/dashboard");
-  }
-
-  redirect("/login");
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+    </div>
+  );
 }
