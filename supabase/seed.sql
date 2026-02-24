@@ -289,7 +289,7 @@ BEGIN
   -- ============================================================
   INSERT INTO site_address (
     id, client_id, company_id, label, street, city, postal_code, country,
-    lat, lng, is_billing_address, notes, created_at
+    latitude, longitude, is_billing_address, notes, created_at
   ) VALUES
     (v_site1_id, v_client1_id, v_company_id,
      'Résidence principale', '14 allée des Chênes', 'Tassin-la-Demi-Lune', '69160', 'France',
@@ -543,9 +543,9 @@ BEGIN
      CURRENT_DATE - INTERVAL '40 days',
      'Acompte chèque reçu de Mme Lemaire. À encaisser.',
      v_user_id, CURRENT_DATE - INTERVAL '40 days'),
-    (v_pay3_id, v_company_id, v_inv2_id, 0.00, 'virement',
+    (v_pay3_id, v_company_id, v_inv2_id, 500.00, 'virement',
      NULL,
-     NULL,
+     CURRENT_DATE,
      'En attente de réception virement Garnier SAS.',
      v_user_id, CURRENT_DATE)
   ON CONFLICT DO NOTHING;
@@ -665,20 +665,28 @@ BEGIN
   -- WEATHER SNAPSHOTS
   -- ============================================================
   INSERT INTO weather_snapshot (
-    id, company_id, date, location, temperature, humidity,
-    wind_speed, conditions, severity, rain_probability, data_json, created_at
+    id, company_id, site_address_id, date, temperature_min, temperature_max,
+    precipitation_mm, wind_speed_kmh, weather_code, severity, description, fetched_at
   ) VALUES
-    (v_wx1_id, v_company_id, CURRENT_DATE, 'Lyon, Auvergne-Rhône-Alpes',
-     19.5, 58, 15, 'Partiellement nuageux', 'acceptable', 20,
-     '{"uv_index":4,"pressure":1013,"sunrise":"06:28","sunset":"20:45"}',
+    (gen_random_uuid(), v_company_id, v_site1_id,
+     CURRENT_DATE + INTERVAL '1 day',
+     8.0, 14.0, 12.5, 35.0, 500, 'defavorable',
+     'Pluie modérée toute la journée, vent soutenu.',
      NOW()),
-    (v_wx2_id, v_company_id, CURRENT_DATE + INTERVAL '1 day', 'Lyon, Auvergne-Rhône-Alpes',
-     16.2, 78, 32, 'Averses modérées', 'defavorable', 75,
-     '{"uv_index":2,"pressure":1005,"sunrise":"06:29","sunset":"20:44","alert":"Vigilance jaune pluie"}',
+    (gen_random_uuid(), v_company_id, v_site2_id,
+     CURRENT_DATE + INTERVAL '1 day',
+     9.0, 16.0, 0.5, 12.0, 801, 'favorable',
+     'Quelques nuages, conditions idéales pour travaux extérieurs.',
      NOW()),
-    (v_wx3_id, v_company_id, CURRENT_DATE + INTERVAL '2 days', 'Lyon, Auvergne-Rhône-Alpes',
-     22.0, 50, 10, 'Ensoleillé', 'favorable', 5,
-     '{"uv_index":6,"pressure":1018,"sunrise":"06:30","sunset":"20:43"}',
+    (gen_random_uuid(), v_company_id, v_site1_id,
+     CURRENT_DATE + INTERVAL '2 days',
+     7.0, 13.0, 8.0, 28.0, 302, 'acceptable',
+     'Averses intermittentes, fenêtre possible en matinée.',
+     NOW()),
+    (gen_random_uuid(), v_company_id, v_site3_id,
+     CURRENT_DATE + INTERVAL '1 day',
+     10.0, 18.0, 0.0, 8.0, 800, 'favorable',
+     'Grand soleil, idéal pour plantation et finitions.',
      NOW())
   ON CONFLICT DO NOTHING;
 
@@ -690,12 +698,12 @@ BEGIN
     started_at, completed_at, error_message, tokens_used
   ) VALUES
     (v_ai_run1_id, v_company_id, 'meteo_replan', 'completed',
-     '{"event_ids":["' || v_evt4_id::text || '"],"forecast_date":"' || TO_CHAR(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD') || '","severity":"defavorable"}'::jsonb,
+     ('{"event_ids":["' || v_evt4_id || '"],"forecast_date":"' || TO_CHAR(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD') || '","severity":"defavorable"}')::jsonb,
      '{"recommendation":"Reporter le chantier Garnier du jeudi au vendredi matin (8h-14h) — météo favorable et Manon disponible en remplacement.","confidence":0.87}'::jsonb,
      NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours' + INTERVAL '8 seconds',
      NULL, 412),
     (v_ai_run2_id, v_company_id, 'relance_auto', 'completed',
-     '{"invoice_id":"' || v_inv3_id::text || '","days_overdue":35,"amount_due":1140.00}'::jsonb,
+     ('{"invoice_id":"' || v_inv3_id || '","days_overdue":35,"amount_due":1140.00}')::jsonb,
      '{"suggested_level":"relance_2","channel":"email","tone":"ferme","subject":"RAPPEL URGENT — Facture FAC-2024-003 en souffrance"}'::jsonb,
      NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day' + INTERVAL '5 seconds',
      NULL, 287)
@@ -706,17 +714,17 @@ BEGIN
     title, description, action_type, action_data,
     is_accepted, accepted_by, accepted_at, dismissed_at, expires_at, created_at
   ) VALUES
-    (v_ai_prop1_id, v_company_id, v_ai_run1_id, 'schedule_event', v_evt4_id::text,
+    (v_ai_prop1_id, v_company_id, v_ai_run1_id, 'schedule_event', v_evt4_id,
      'Reporter le chantier Garnier (météo défavorable demain)',
      'Les prévisions météo indiquent des averses modérées demain (probabilité 75%). Il est recommandé de reporter le chantier d''entretien Garnier SAS au vendredi, conditions favorables prévues.',
      'reschedule',
-     '{"original_start":"' || TO_CHAR(date_trunc('week', CURRENT_DATE) + INTERVAL '3 days 7 hours 30 minutes', 'YYYY-MM-DD"T"HH24:MI:SS') || '","suggested_start":"' || TO_CHAR(date_trunc('week', CURRENT_DATE) + INTERVAL '4 days 8 hours', 'YYYY-MM-DD"T"HH24:MI:SS') || '"}'::jsonb,
+     ('{"original_start":"' || TO_CHAR(date_trunc('week', CURRENT_DATE) + INTERVAL '3 days 7 hours 30 minutes', 'YYYY-MM-DD"T"HH24:MI:SS') || '","suggested_start":"' || TO_CHAR(date_trunc('week', CURRENT_DATE) + INTERVAL '4 days 8 hours', 'YYYY-MM-DD"T"HH24:MI:SS') || '"}')::jsonb,
      true, v_user_id,
      NOW() - INTERVAL '1 hour 30 minutes',
      NULL,
      NOW() + INTERVAL '2 days',
      NOW() - INTERVAL '2 hours'),
-    (v_ai_prop2_id, v_company_id, v_ai_run2_id, 'invoice', v_inv3_id::text,
+    (v_ai_prop2_id, v_company_id, v_ai_run2_id, 'invoice', v_inv3_id,
      'Envoyer relance niveau 2 — FAC-2024-003 (35j de retard)',
      'La facture FAC-2024-003 (1 140,00 € restant dû) accuse 35 jours de retard. Une deuxième relance ferme par email est recommandée avant d''envisager une mise en demeure.',
      'send_reminder',
@@ -730,26 +738,20 @@ BEGIN
   -- REMINDER WORKFLOW
   -- ============================================================
   INSERT INTO reminder_workflow (
-    id, company_id, invoice_id, current_level, next_send_at,
-    is_active, last_sent_at, created_at, updated_at
+    id, company_id, invoice_id, client_id, current_level,
+    is_active, started_at, last_action_at
   ) VALUES (
-    v_rw1_id, v_company_id, v_inv3_id, 'relance_1',
-    NOW() + INTERVAL '2 days',
-    true,
-    CURRENT_DATE - INTERVAL '10 days',
-    CURRENT_DATE - INTERVAL '20 days',
-    NOW()
-  ) ON CONFLICT DO NOTHING;
+    v_rw1_id, v_company_id, v_inv3_id, v_client3_id, 'relance_1',
+    true, CURRENT_DATE - INTERVAL '5 days', CURRENT_DATE - INTERVAL '2 days'
+  )
+  ON CONFLICT DO NOTHING;
 
   INSERT INTO reminder_message (
-    id, workflow_id, level, channel, subject, body,
-    sent_at, status, error_message, created_at
+    id, reminder_workflow_id, level, channel, subject, body, sent_at
   ) VALUES (
     v_rm1_id, v_rw1_id, 'relance_1', 'email',
     'Rappel — Facture FAC-2024-003 en attente de règlement',
-    'Madame Lemaire,\n\nNous nous permettons de vous rappeler que la facture FAC-2024-003 d''un montant de 1 740,00 € TTC, dont 1 140,00 € TTC restent à régler, était échue au ' || TO_CHAR(CURRENT_DATE - INTERVAL '35 days', 'DD/MM/YYYY') || '.\n\nNous vous remercions de bien vouloir procéder au règlement dans les meilleurs délais.\n\nCordialement,\nTerraCore Paysage',
-    CURRENT_DATE - INTERVAL '10 days',
-    'sent', NULL,
+    'Madame Lemaire, nous nous permettons de vous rappeler que la facture FAC-2024-003 reste en attente de règlement. Merci de procéder au règlement dans les meilleurs délais. Cordialement, TerraCore Paysage',
     CURRENT_DATE - INTERVAL '10 days'
   ) ON CONFLICT DO NOTHING;
 
@@ -766,8 +768,8 @@ BEGIN
     CURRENT_DATE - INTERVAL '22 days',
     v_site1_id,
     'Livraison terre végétale (12m³) et gazon rouleaux (85m²). Réceptionné et signé par Mme Rousseau.',
-    'bon_livraison',
-    'Lucas Bernard',
+    'livre',
+    v_emp2_id,
     NULL,
     CURRENT_DATE - INTERVAL '22 days',
     CURRENT_DATE - INTERVAL '22 days'
@@ -781,31 +783,31 @@ BEGIN
     old_data, new_data, ip_address, created_at
   ) VALUES
     (gen_random_uuid(), v_company_id, v_user_id,
-     'CREATE', 'quote', v_quote1_id::text,
+     'CREATE', 'quote', v_quote1_id,
      NULL,
      '{"reference":"DEV-2024-001","status":"brouillon","total_ttc":5820.00}'::jsonb,
      '192.168.1.10',
      CURRENT_DATE - INTERVAL '30 days'),
     (gen_random_uuid(), v_company_id, v_user_id,
-     'UPDATE', 'quote', v_quote1_id::text,
+     'UPDATE', 'quote', v_quote1_id,
      '{"status":"brouillon"}'::jsonb,
-     '{"status":"accepte","signed_at":"' || TO_CHAR(CURRENT_DATE - INTERVAL '25 days', 'YYYY-MM-DD') || '","signed_by":"Isabelle Rousseau"}'::jsonb,
+     ('{"status":"accepte","signed_at":"' || TO_CHAR(CURRENT_DATE - INTERVAL '25 days', 'YYYY-MM-DD') || '","signed_by":"Isabelle Rousseau"}')::jsonb,
      '192.168.1.10',
      CURRENT_DATE - INTERVAL '25 days'),
     (gen_random_uuid(), v_company_id, v_user_id,
-     'CREATE', 'invoice', v_inv1_id::text,
+     'CREATE', 'invoice', v_inv1_id,
      NULL,
      '{"reference":"FAC-2024-001","status":"envoyee","total_ttc":5820.00}'::jsonb,
      '192.168.1.10',
      CURRENT_DATE - INTERVAL '20 days'),
     (gen_random_uuid(), v_company_id, v_user_id,
-     'UPDATE', 'invoice', v_inv1_id::text,
+     'UPDATE', 'invoice', v_inv1_id,
      '{"status":"envoyee","amount_paid":0}'::jsonb,
      '{"status":"payee","amount_paid":5820.00,"remaining_due":0}'::jsonb,
      '192.168.1.10',
      CURRENT_DATE - INTERVAL '7 days'),
     (gen_random_uuid(), v_company_id, v_user_id,
-     'CREATE', 'quote', v_quote3_id::text,
+     'CREATE', 'quote', v_quote3_id,
      NULL,
      '{"reference":"DEV-2024-003","status":"brouillon","total_ttc":9144.00}'::jsonb,
      '192.168.1.10',
@@ -816,27 +818,23 @@ BEGIN
   -- NOTIFICATIONS
   -- ============================================================
   INSERT INTO notification (
-    id, company_id, user_id, title, body, type,
-    entity_type, entity_id, is_read, created_at
+    id, company_id, user_id, title, body, link, is_read, created_at
   ) VALUES
-    (v_notif1_id, v_company_id, v_user_id,
-     'Devis accepté — DEV-2024-001',
-     'Isabelle Rousseau a accepté et signé le devis DEV-2024-001 (5 820,00 € TTC).',
-     'success',
-     'quote', v_quote1_id::text, true,
-     CURRENT_DATE - INTERVAL '25 days'),
-    (v_notif2_id, v_company_id, v_user_id,
-     'Facture en retard — FAC-2024-003',
-     'La facture FAC-2024-003 (1 140,00 € TTC restants) est en retard de 35 jours. Une action est requise.',
-     'warning',
-     'invoice', v_inv3_id::text, false,
-     CURRENT_DATE - INTERVAL '5 days'),
-    (v_notif3_id, v_company_id, v_user_id,
-     'Alerte météo — Chantier Garnier à reporter',
-     'Des averses sont prévues demain. L''IA suggère de reporter le chantier Garnier SAS au vendredi.',
-     'info',
-     'schedule_event', v_evt4_id::text, false,
-     NOW() - INTERVAL '2 hours')
+    (gen_random_uuid(), v_company_id, v_user_id,
+     'Nouveau devis accepté',
+     'Le devis DEV-2024-001 a été signé par Isabelle Rousseau.',
+     '/dashboard/documents/devis/' || v_quote1_id,
+     true, CURRENT_DATE - INTERVAL '25 days'),
+    (gen_random_uuid(), v_company_id, v_user_id,
+     'Facture en retard',
+     'La facture FAC-2024-003 de Mme Lemaire est en retard de paiement.',
+     '/dashboard/documents/factures/' || v_inv3_id,
+     false, CURRENT_DATE - INTERVAL '1 day'),
+    (gen_random_uuid(), v_company_id, v_user_id,
+     'Alerte météo demain',
+     'Pluie forte prévue demain — chantier Garnier SAS potentiellement impacté.',
+     '/dashboard/chantiers',
+     false, NOW())
   ON CONFLICT DO NOTHING;
 
   RAISE NOTICE 'Seed data inserted successfully for company_id: %', v_company_id;
