@@ -47,7 +47,7 @@ export function useAuth(): UseAuthReturn {
     async (userId: string) => {
       try {
         const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
+          .from('user_profile')
           .select('*')
           .eq('id', userId)
           .single();
@@ -58,7 +58,7 @@ export function useAuth(): UseAuthReturn {
         }
 
         const { data: companyData, error: companyError } = await supabase
-          .from('companies')
+          .from('company')
           .select('*')
           .eq('id', profileData.company_id)
           .single();

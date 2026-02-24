@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
   FileText,
@@ -353,7 +353,7 @@ export default function DashboardLayout({
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState(3);
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -373,7 +373,7 @@ export default function DashboardLayout({
         }
 
         const { data: profileData } = await supabase
-          .from("profiles")
+          .from("user_profile")
           .select("*, companies(name)")
           .eq("id", user.id)
           .single();

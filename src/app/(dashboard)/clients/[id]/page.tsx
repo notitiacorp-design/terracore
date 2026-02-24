@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { ClientDetailHeader } from "@/components/clients/client-detail-header";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -92,13 +92,13 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
       try {
         const [clientRes, contactsRes, addressesRes, docsRes, eventsRes, remindersRes, notesRes] =
           await Promise.all([
-            supabase.from("clients").select("*").eq("id", id).single(),
-            supabase.from("contacts").select("*").eq("client_id", id).order("created_at"),
-            supabase.from("addresses").select("*").eq("client_id", id).order("is_billing", { ascending: false }),
-            supabase.from("documents").select("*").eq("client_id", id).order("created_at", { ascending: false }),
-            supabase.from("schedule_events").select("*").eq("client_id", id).order("starts_at", { ascending: false }),
-            supabase.from("reminder_workflows").select("*").eq("client_id", id).order("created_at", { ascending: false }),
-            supabase.from("client_notes").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+            supabase.from("client").select("*").eq("id", id).single(),
+            supabase.from("client_contact").select("*").eq("client_id", id).order("created_at"),
+            supabase.from("site_address").select("*").eq("client_id", id).order("is_billing", { ascending: false }),
+            supabase.from("document_attachment").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+            supabase.from("schedule_event").select("*").eq("client_id", id).order("starts_at", { ascending: false }),
+            supabase.from("reminder_workflow").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+            supabase.from("audit_log").select("*").eq("client_id", id).order("created_at", { ascending: false }),
           ]);
 
         if (clientRes.error) throw clientRes.error;
@@ -125,7 +125,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
-        .from("client_notes")
+        .from("audit_log")
         .insert({ client_id: id, content: noteContent.trim(), created_by: user?.id ?? null })
         .select()
         .single();

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import {
   TrendingUp,
   TrendingDown,
@@ -720,7 +720,7 @@ function ActivityTimeline({
 // Main Page
 // ─────────────────────────────────────────────
 export default function DashboardPage() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   const [kpi, setKpi] = useState<KPIData | null>(null);
@@ -741,7 +741,7 @@ export default function DashboardPage() {
       if (!user) return;
 
       const { data: profile } = await supabase
-        .from("profiles")
+        .from("user_profile")
         .select("company_id")
         .eq("id", user.id)
         .single();
@@ -770,23 +770,23 @@ export default function DashboardPage() {
       const [invoicesThisMonth, invoicesLastMonth, pendingQuotes, unpaidInvoices] =
         await Promise.all([
           supabase
-            .from("invoices")
+            .from("invoice")
             .select("total_amount")
             .eq("company_id", companyId)
             .gte("created_at", startOfMonth),
           supabase
-            .from("invoices")
+            .from("invoice")
             .select("total_amount")
             .eq("company_id", companyId)
             .gte("created_at", startOfLastMonth)
             .lte("created_at", endOfLastMonth),
           supabase
-            .from("quotes")
+            .from("quote")
             .select("id, total_amount")
             .eq("company_id", companyId)
             .eq("status", "pending"),
           supabase
-            .from("invoices")
+            .from("invoice")
             .select("id, total_amount")
             .eq("company_id", companyId)
             .eq("status", "unpaid"),
@@ -862,7 +862,7 @@ export default function DashboardPage() {
       todayEnd.setHours(23, 59, 59, 999);
 
       const { data, error } = await supabase
-        .from("schedule_events")
+        .from("schedule_event")
         .select(
           `
           id, title, start_time, end_time, status,
@@ -919,7 +919,7 @@ export default function DashboardPage() {
     setLoadingActivity(true);
     try {
       const { data, error } = await supabase
-        .from("audit_logs")
+        .from("audit_log")
         .select(
           "id, action, entity_type, entity_label, created_at, profiles(full_name)"
         )

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, MailCheck } from "lucide-react";
 
@@ -31,7 +31,7 @@ const resetSchema = z.object({
 type ResetFormValues = z.infer<typeof resetSchema>;
 
 export default function ResetPasswordPage() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [sentToEmail, setSentToEmail] = useState("");

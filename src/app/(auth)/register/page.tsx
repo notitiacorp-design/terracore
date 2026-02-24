@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Eye, EyeOff, CheckSquare, Square } from "lucide-react";
 
@@ -61,7 +61,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,7 +120,7 @@ export default function RegisterPage() {
       const userId = authData.user.id;
 
       const { data: companyData, error: companyError } = await supabase
-        .from("companies")
+        .from("company")
         .insert([
           {
             name: values.companyName,
@@ -140,7 +140,7 @@ export default function RegisterPage() {
       const companyId = companyData?.id ?? null;
 
       const { error: profileError } = await supabase
-        .from("user_profiles")
+        .from("user_profile")
         .insert([
           {
             id: userId,

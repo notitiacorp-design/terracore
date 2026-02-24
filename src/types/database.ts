@@ -1,70 +1,112 @@
-export type UserRole = 'owner' | 'admin' | 'manager' | 'technician' | 'accountant' | 'viewer';
-export type ClientType = 'individual' | 'company' | 'public_entity';
-export type ItemType = 'service' | 'product' | 'equipment' | 'consumable';
-export type QuoteStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired' | 'cancelled';
-export type InvoiceStatus = 'draft' | 'sent' | 'viewed' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'refunded';
-export type DocumentType = 'quote' | 'invoice' | 'delivery_note' | 'deposit_invoice' | 'progress_invoice' | 'contract' | 'other';
-export type ReminderLevel = 'gentle' | 'standard' | 'firm' | 'final';
-export type WeatherSeverity = 'low' | 'moderate' | 'high' | 'extreme';
-export type PaymentMethod = 'bank_transfer' | 'check' | 'cash' | 'card' | 'direct_debit' | 'online';
-export type ScheduleEventType = 'intervention' | 'visit' | 'meeting' | 'delivery' | 'maintenance' | 'other';
-export type AiAgentType = 'quote_optimizer' | 'reminder_writer' | 'route_planner' | 'weather_advisor' | 'report_generator' | 'chatbot';
+// =============================================================================
+// DATABASE TYPES - AUTO-GENERATED FOR SUPABASE
+// =============================================================================
 
-// ─── Company ─────────────────────────────────────────────────────────────────
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+export type UserRole = 'admin' | 'bureau' | 'terrain' | 'lecture';
+export type ClientType = 'particulier' | 'pro';
+export type ItemType = 'materiau' | 'main_oeuvre' | 'fourniture' | 'location';
+export type QuoteStatus = 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire';
+export type InvoiceStatus = 'brouillon' | 'envoyee' | 'payee' | 'partiellement_payee' | 'en_retard' | 'annulee';
+export type DocumentType = 'devis' | 'facture' | 'avoir' | 'acompte' | 'situation' | 'bon_livraison';
+export type ReminderLevel = 'relance_1' | 'relance_2' | 'relance_3' | 'mise_en_demeure' | 'contentieux';
+export type WeatherSeverity = 'favorable' | 'acceptable' | 'defavorable' | 'alerte';
+export type PaymentMethod = 'virement' | 'cheque' | 'cb' | 'especes' | 'prelevement';
+export type ScheduleEventType = 'chantier' | 'rdv_client' | 'reunion' | 'conge' | 'absence';
+export type AiAgentType = 'meteo_replan' | 'relance_auto' | 'devis_assist' | 'marge_alert';
+
+// =============================================================================
+// TABLE: company
+// =============================================================================
+
 export interface CompanyRow {
   id: string;
   name: string;
-  legal_name: string | null;
   siret: string | null;
-  vat_number: string | null;
   address: string | null;
-  city: string | null;
-  postal_code: string | null;
-  country: string;
   phone: string | null;
   email: string | null;
-  website: string | null;
   logo_url: string | null;
-  signature_url: string | null;
-  bank_iban: string | null;
-  bank_bic: string | null;
-  default_vat_rate: number;
-  default_payment_terms: number;
-  quote_validity_days: number;
-  invoice_prefix: string;
-  quote_prefix: string;
-  created_at: string;
-  updated_at: string;
+  settings: Record<string, unknown>;
+  subscription_plan: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface CompanyInsert extends Omit<CompanyRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type CompanyUpdate = Partial<CompanyInsert>;
 
-// ─── UserProfile ─────────────────────────────────────────────────────────────
+export interface CompanyInsert {
+  id?: string;
+  name: string;
+  siret?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logo_url?: string | null;
+  settings?: Record<string, unknown>;
+  subscription_plan?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CompanyUpdate {
+  name?: string;
+  siret?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logo_url?: string | null;
+  settings?: Record<string, unknown>;
+  subscription_plan?: string;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: user_profile
+// =============================================================================
+
 export interface UserProfileRow {
   id: string;
   company_id: string;
+  role: UserRole;
   first_name: string;
   last_name: string;
-  email: string;
   phone: string | null;
-  role: UserRole;
   avatar_url: string | null;
   is_active: boolean;
-  preferences: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface UserProfileInsert extends Omit<UserProfileRow, 'created_at' | 'updated_at'> {
-  created_at?: string;
-  updated_at?: string;
-}
-export type UserProfileUpdate = Partial<Omit<UserProfileInsert, 'id'>>;
 
-// ─── Employee ─────────────────────────────────────────────────────────────────
+export interface UserProfileInsert {
+  id: string;
+  company_id: string;
+  role?: UserRole;
+  first_name?: string;
+  last_name?: string;
+  phone?: string | null;
+  avatar_url?: string | null;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserProfileUpdate {
+  company_id?: string;
+  role?: UserRole;
+  first_name?: string;
+  last_name?: string;
+  phone?: string | null;
+  avatar_url?: string | null;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: employee
+// =============================================================================
+
 export interface EmployeeRow {
   id: string;
   company_id: string;
@@ -73,98 +115,192 @@ export interface EmployeeRow {
   last_name: string;
   email: string | null;
   phone: string | null;
-  job_title: string | null;
-  hourly_rate: number | null;
-  color: string | null;
+  role: string | null;
+  hourly_rate: number;
   is_active: boolean;
-  skills: string[];
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface EmployeeInsert extends Omit<EmployeeRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type EmployeeUpdate = Partial<Omit<EmployeeInsert, 'company_id'>>;
 
-// ─── Client ───────────────────────────────────────────────────────────────────
+export interface EmployeeInsert {
+  id?: string;
+  company_id: string;
+  user_profile_id?: string | null;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  hourly_rate?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface EmployeeUpdate {
+  company_id?: string;
+  user_profile_id?: string | null;
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  hourly_rate?: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: client
+// =============================================================================
+
 export interface ClientRow {
   id: string;
   company_id: string;
   client_type: ClientType;
-  name: string;
-  legal_name: string | null;
-  siret: string | null;
-  vat_number: string | null;
-  email: string | null;
-  phone: string | null;
-  mobile: string | null;
-  address: string | null;
-  city: string | null;
-  postal_code: string | null;
-  country: string;
-  price_category_id: string | null;
-  payment_terms: number;
-  notes: string | null;
-  is_active: boolean;
-  customer_reference: string | null;
-  created_at: string;
-  updated_at: string;
-}
-export interface ClientInsert extends Omit<ClientRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ClientUpdate = Partial<Omit<ClientInsert, 'company_id'>>;
-
-// ─── ClientContact ─────────────────────────────────────────────────────────────
-export interface ClientContactRow {
-  id: string;
-  client_id: string;
-  company_id: string;
+  company_name: string | null;
   first_name: string;
   last_name: string;
   email: string | null;
   phone: string | null;
-  job_title: string | null;
-  is_primary: boolean;
-  created_at: string;
-  updated_at: string;
+  notes: string | null;
+  payment_terms_days: number;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ClientContactInsert extends Omit<ClientContactRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ClientContactUpdate = Partial<Omit<ClientContactInsert, 'client_id' | 'company_id'>>;
 
-// ─── SiteAddress ──────────────────────────────────────────────────────────────
+export interface ClientInsert {
+  id?: string;
+  company_id: string;
+  client_type?: ClientType;
+  company_name?: string | null;
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  payment_terms_days?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ClientUpdate {
+  company_id?: string;
+  client_type?: ClientType;
+  company_name?: string | null;
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  payment_terms_days?: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: client_contact
+// =============================================================================
+
+export interface ClientContactRow {
+  id: string;
+  client_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+  is_primary: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ClientContactInsert {
+  id?: string;
+  client_id: string;
+  first_name: string;
+  last_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  is_primary?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ClientContactUpdate {
+  client_id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  is_primary?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: site_address
+// =============================================================================
+
 export interface SiteAddressRow {
   id: string;
   client_id: string;
   company_id: string;
-  label: string;
-  address: string;
-  city: string;
+  label: string | null;
+  street: string;
+  complement: string | null;
   postal_code: string;
+  city: string;
   country: string;
   latitude: number | null;
   longitude: number | null;
   notes: string | null;
   is_default: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface SiteAddressInsert extends Omit<SiteAddressRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type SiteAddressUpdate = Partial<Omit<SiteAddressInsert, 'client_id' | 'company_id'>>;
 
-// ─── PriceCategory ───────────────────────────────────────────────────────────
+export interface SiteAddressInsert {
+  id?: string;
+  client_id: string;
+  company_id: string;
+  label?: string | null;
+  street: string;
+  complement?: string | null;
+  postal_code: string;
+  city: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  is_default?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SiteAddressUpdate {
+  client_id?: string;
+  company_id?: string;
+  label?: string | null;
+  street?: string;
+  complement?: string | null;
+  postal_code?: string;
+  city?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  is_default?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: price_category
+// =============================================================================
+
 export interface PriceCategoryRow {
   id: string;
   company_id: string;
@@ -172,92 +308,189 @@ export interface PriceCategoryRow {
   description: string | null;
   discount_percent: number;
   is_default: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface PriceCategoryInsert extends Omit<PriceCategoryRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type PriceCategoryUpdate = Partial<Omit<PriceCategoryInsert, 'company_id'>>;
 
-// ─── ItemFamily ───────────────────────────────────────────────────────────────
+export interface PriceCategoryInsert {
+  id?: string;
+  company_id: string;
+  name: string;
+  description?: string | null;
+  discount_percent?: number;
+  is_default?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PriceCategoryUpdate {
+  company_id?: string;
+  name?: string;
+  description?: string | null;
+  discount_percent?: number;
+  is_default?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: item_family
+// =============================================================================
+
 export interface ItemFamilyRow {
   id: string;
   company_id: string;
   name: string;
   description: string | null;
   parent_id: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ItemFamilyInsert extends Omit<ItemFamilyRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ItemFamilyUpdate = Partial<Omit<ItemFamilyInsert, 'company_id'>>;
 
-// ─── Item ─────────────────────────────────────────────────────────────────────
+export interface ItemFamilyInsert {
+  id?: string;
+  company_id: string;
+  name: string;
+  description?: string | null;
+  parent_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ItemFamilyUpdate {
+  company_id?: string;
+  name?: string;
+  description?: string | null;
+  parent_id?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: item
+// =============================================================================
+
 export interface ItemRow {
   id: string;
   company_id: string;
   family_id: string | null;
+  item_type: ItemType;
   reference: string | null;
   name: string;
   description: string | null;
-  item_type: ItemType;
   unit: string;
   unit_price: number;
-  cost_price: number | null;
+  cost_price: number;
   vat_rate: number;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ItemInsert extends Omit<ItemRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ItemUpdate = Partial<Omit<ItemInsert, 'company_id'>>;
 
-// ─── WorkUnit ─────────────────────────────────────────────────────────────────
+export interface ItemInsert {
+  id?: string;
+  company_id: string;
+  family_id?: string | null;
+  item_type?: ItemType;
+  reference?: string | null;
+  name: string;
+  description?: string | null;
+  unit?: string;
+  unit_price?: number;
+  cost_price?: number;
+  vat_rate?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ItemUpdate {
+  company_id?: string;
+  family_id?: string | null;
+  item_type?: ItemType;
+  reference?: string | null;
+  name?: string;
+  description?: string | null;
+  unit?: string;
+  unit_price?: number;
+  cost_price?: number;
+  vat_rate?: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: work_unit
+// =============================================================================
+
 export interface WorkUnitRow {
   id: string;
   company_id: string;
+  reference: string | null;
   name: string;
   description: string | null;
   unit: string;
   unit_price: number;
   vat_rate: number;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface WorkUnitInsert extends Omit<WorkUnitRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type WorkUnitUpdate = Partial<Omit<WorkUnitInsert, 'company_id'>>;
 
-// ─── WorkUnitLine ─────────────────────────────────────────────────────────────
+export interface WorkUnitInsert {
+  id?: string;
+  company_id: string;
+  reference?: string | null;
+  name: string;
+  description?: string | null;
+  unit?: string;
+  unit_price?: number;
+  vat_rate?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkUnitUpdate {
+  company_id?: string;
+  reference?: string | null;
+  name?: string;
+  description?: string | null;
+  unit?: string;
+  unit_price?: number;
+  vat_rate?: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: work_unit_line
+// =============================================================================
+
 export interface WorkUnitLineRow {
   id: string;
   work_unit_id: string;
   item_id: string;
   quantity: number;
-  created_at: string;
+  created_at: string | null;
 }
-export interface WorkUnitLineInsert extends Omit<WorkUnitLineRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type WorkUnitLineUpdate = Partial<Omit<WorkUnitLineInsert, 'work_unit_id'>>;
 
-// ─── Quote ────────────────────────────────────────────────────────────────────
+export interface WorkUnitLineInsert {
+  id?: string;
+  work_unit_id: string;
+  item_id: string;
+  quantity?: number;
+  created_at?: string | null;
+}
+
+export interface WorkUnitLineUpdate {
+  work_unit_id?: string;
+  item_id?: string;
+  quantity?: number;
+}
+
+// =============================================================================
+// TABLE: quote
+// =============================================================================
+
 export interface QuoteRow {
   id: string;
   company_id: string;
@@ -266,35 +499,78 @@ export interface QuoteRow {
   quote_number: string;
   status: QuoteStatus;
   issue_date: string;
-  validity_date: string;
+  date_validity: string | null;
   subject: string | null;
   notes: string | null;
   internal_notes: string | null;
-  terms_and_conditions: string | null;
+  terms_conditions: string | null;
   discount_percent: number;
   discount_amount: number;
   total_ht: number;
   total_vat: number;
   total_ttc: number;
-  deposit_percent: number | null;
-  deposit_amount: number | null;
   assigned_to: string | null;
   sent_at: string | null;
   viewed_at: string | null;
   accepted_at: string | null;
-  rejected_at: string | null;
-  converted_to_invoice_id: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface QuoteInsert extends Omit<QuoteRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type QuoteUpdate = Partial<Omit<QuoteInsert, 'company_id'>>;
 
-// ─── QuoteLine ────────────────────────────────────────────────────────────────
+export interface QuoteInsert {
+  id?: string;
+  company_id: string;
+  client_id: string;
+  site_address_id?: string | null;
+  quote_number: string;
+  status?: QuoteStatus;
+  issue_date?: string;
+  date_validity?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
+  terms_conditions?: string | null;
+  discount_percent?: number;
+  discount_amount?: number;
+  total_ht?: number;
+  total_vat?: number;
+  total_ttc?: number;
+  assigned_to?: string | null;
+  sent_at?: string | null;
+  viewed_at?: string | null;
+  accepted_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface QuoteUpdate {
+  company_id?: string;
+  client_id?: string;
+  site_address_id?: string | null;
+  quote_number?: string;
+  status?: QuoteStatus;
+  issue_date?: string;
+  date_validity?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
+  terms_conditions?: string | null;
+  discount_percent?: number;
+  discount_amount?: number;
+  total_ht?: number;
+  total_vat?: number;
+  total_ttc?: number;
+  assigned_to?: string | null;
+  sent_at?: string | null;
+  viewed_at?: string | null;
+  accepted_at?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: quote_line
+// =============================================================================
+
 export interface QuoteLineRow {
   id: string;
   quote_id: string;
@@ -309,17 +585,48 @@ export interface QuoteLineRow {
   vat_rate: number;
   total_ht: number;
   total_ttc: number;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface QuoteLineInsert extends Omit<QuoteLineRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type QuoteLineUpdate = Partial<Omit<QuoteLineInsert, 'quote_id'>>;
 
-// ─── Invoice ──────────────────────────────────────────────────────────────────
+export interface QuoteLineInsert {
+  id?: string;
+  quote_id: string;
+  item_id?: string | null;
+  work_unit_id?: string | null;
+  position?: number;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  discount_percent?: number;
+  vat_rate?: number;
+  total_ht?: number;
+  total_ttc?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface QuoteLineUpdate {
+  quote_id?: string;
+  item_id?: string | null;
+  work_unit_id?: string | null;
+  position?: number;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  discount_percent?: number;
+  vat_rate?: number;
+  total_ht?: number;
+  total_ttc?: number;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: invoice
+// =============================================================================
+
 export interface InvoiceRow {
   id: string;
   company_id: string;
@@ -329,34 +636,86 @@ export interface InvoiceRow {
   invoice_number: string;
   status: InvoiceStatus;
   issue_date: string;
-  due_date: string;
+  due_date: string | null;
   subject: string | null;
   notes: string | null;
   internal_notes: string | null;
-  terms_and_conditions: string | null;
+  terms_conditions: string | null;
   discount_percent: number;
   discount_amount: number;
   total_ht: number;
   total_vat: number;
   total_ttc: number;
   amount_paid: number;
-  amount_due: number;
-  payment_terms: number;
+  amount_remaining: number;
   assigned_to: string | null;
   sent_at: string | null;
   viewed_at: string | null;
   paid_at: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface InvoiceInsert extends Omit<InvoiceRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type InvoiceUpdate = Partial<Omit<InvoiceInsert, 'company_id'>>;
 
-// ─── InvoiceLine ──────────────────────────────────────────────────────────────
+export interface InvoiceInsert {
+  id?: string;
+  company_id: string;
+  client_id: string;
+  quote_id?: string | null;
+  site_address_id?: string | null;
+  invoice_number: string;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  due_date?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
+  terms_conditions?: string | null;
+  discount_percent?: number;
+  discount_amount?: number;
+  total_ht?: number;
+  total_vat?: number;
+  total_ttc?: number;
+  amount_paid?: number;
+  amount_remaining?: number;
+  assigned_to?: string | null;
+  sent_at?: string | null;
+  viewed_at?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface InvoiceUpdate {
+  company_id?: string;
+  client_id?: string;
+  quote_id?: string | null;
+  site_address_id?: string | null;
+  invoice_number?: string;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  due_date?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
+  terms_conditions?: string | null;
+  discount_percent?: number;
+  discount_amount?: number;
+  total_ht?: number;
+  total_vat?: number;
+  total_ttc?: number;
+  amount_paid?: number;
+  amount_remaining?: number;
+  assigned_to?: string | null;
+  sent_at?: string | null;
+  viewed_at?: string | null;
+  paid_at?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: invoice_line
+// =============================================================================
+
 export interface InvoiceLineRow {
   id: string;
   invoice_id: string;
@@ -371,88 +730,191 @@ export interface InvoiceLineRow {
   vat_rate: number;
   total_ht: number;
   total_ttc: number;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface InvoiceLineInsert extends Omit<InvoiceLineRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type InvoiceLineUpdate = Partial<Omit<InvoiceLineInsert, 'invoice_id'>>;
 
-// ─── DepositInvoice ────────────────────────────────────────────────────────────
+export interface InvoiceLineInsert {
+  id?: string;
+  invoice_id: string;
+  item_id?: string | null;
+  work_unit_id?: string | null;
+  position?: number;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  discount_percent?: number;
+  vat_rate?: number;
+  total_ht?: number;
+  total_ttc?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface InvoiceLineUpdate {
+  invoice_id?: string;
+  item_id?: string | null;
+  work_unit_id?: string | null;
+  position?: number;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  discount_percent?: number;
+  vat_rate?: number;
+  total_ht?: number;
+  total_ttc?: number;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: deposit_invoice
+// =============================================================================
+
 export interface DepositInvoiceRow {
   id: string;
   company_id: string;
+  invoice_id: string;
   quote_id: string;
-  invoice_id: string | null;
-  deposit_number: string;
-  percent: number;
-  amount_ht: number;
-  amount_ttc: number;
+  deposit_percent: number;
+  deposit_amount: number;
   status: InvoiceStatus;
   issue_date: string;
-  due_date: string;
-  paid_at: string | null;
-  created_at: string;
-  updated_at: string;
+  due_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface DepositInvoiceInsert extends Omit<DepositInvoiceRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type DepositInvoiceUpdate = Partial<Omit<DepositInvoiceInsert, 'company_id'>>;
 
-// ─── ProgressInvoice ──────────────────────────────────────────────────────────
+export interface DepositInvoiceInsert {
+  id?: string;
+  company_id: string;
+  invoice_id: string;
+  quote_id: string;
+  deposit_percent: number;
+  deposit_amount: number;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  due_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface DepositInvoiceUpdate {
+  company_id?: string;
+  invoice_id?: string;
+  quote_id?: string;
+  deposit_percent?: number;
+  deposit_amount?: number;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  due_date?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: progress_invoice
+// =============================================================================
+
 export interface ProgressInvoiceRow {
   id: string;
   company_id: string;
+  invoice_id: string;
   quote_id: string;
-  invoice_id: string | null;
-  progress_number: string;
+  progress_number: number;
   cumulative_percent: number;
-  period_percent: number;
-  amount_ht: number;
-  amount_ttc: number;
+  cumulative_amount: number;
+  period_amount: number;
   status: InvoiceStatus;
   issue_date: string;
-  due_date: string;
-  paid_at: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ProgressInvoiceInsert extends Omit<ProgressInvoiceRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ProgressInvoiceUpdate = Partial<Omit<ProgressInvoiceInsert, 'company_id'>>;
 
-// ─── DeliveryNote ─────────────────────────────────────────────────────────────
+export interface ProgressInvoiceInsert {
+  id?: string;
+  company_id: string;
+  invoice_id: string;
+  quote_id: string;
+  progress_number: number;
+  cumulative_percent: number;
+  cumulative_amount: number;
+  period_amount: number;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ProgressInvoiceUpdate {
+  company_id?: string;
+  invoice_id?: string;
+  quote_id?: string;
+  progress_number?: number;
+  cumulative_percent?: number;
+  cumulative_amount?: number;
+  period_amount?: number;
+  status?: InvoiceStatus;
+  issue_date?: string;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: delivery_note
+// =============================================================================
+
 export interface DeliveryNoteRow {
   id: string;
   company_id: string;
   client_id: string;
-  invoice_id: string | null;
+  site_address_id: string | null;
+  quote_id: string | null;
   delivery_number: string;
   delivery_date: string;
-  site_address_id: string | null;
   notes: string | null;
+  signed_by_client: boolean;
+  client_signature_url: string | null;
   signed_at: string | null;
-  signature_url: string | null;
-  created_at: string;
-  updated_at: string;
+  created_by: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface DeliveryNoteInsert extends Omit<DeliveryNoteRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type DeliveryNoteUpdate = Partial<Omit<DeliveryNoteInsert, 'company_id'>>;
 
-// ─── DeliveryNoteLine ─────────────────────────────────────────────────────────
+export interface DeliveryNoteInsert {
+  id?: string;
+  company_id: string;
+  client_id: string;
+  site_address_id?: string | null;
+  quote_id?: string | null;
+  delivery_number: string;
+  delivery_date?: string;
+  notes?: string | null;
+  signed_by_client?: boolean;
+  client_signature_url?: string | null;
+  signed_at?: string | null;
+  created_by: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface DeliveryNoteUpdate {
+  company_id?: string;
+  client_id?: string;
+  site_address_id?: string | null;
+  quote_id?: string | null;
+  delivery_number?: string;
+  delivery_date?: string;
+  notes?: string | null;
+  signed_by_client?: boolean;
+  client_signature_url?: string | null;
+  signed_at?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: delivery_note_line
+// =============================================================================
+
 export interface DeliveryNoteLineRow {
   id: string;
   delivery_note_id: string;
@@ -460,15 +922,31 @@ export interface DeliveryNoteLineRow {
   description: string;
   quantity: number;
   unit: string;
-  created_at: string;
+  created_at: string | null;
 }
-export interface DeliveryNoteLineInsert extends Omit<DeliveryNoteLineRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type DeliveryNoteLineUpdate = Partial<Omit<DeliveryNoteLineInsert, 'delivery_note_id'>>;
 
-// ─── MaintenanceContract ──────────────────────────────────────────────────────
+export interface DeliveryNoteLineInsert {
+  id?: string;
+  delivery_note_id: string;
+  item_id?: string | null;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  created_at?: string | null;
+}
+
+export interface DeliveryNoteLineUpdate {
+  delivery_note_id?: string;
+  item_id?: string | null;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+}
+
+// =============================================================================
+// TABLE: maintenance_contract
+// =============================================================================
+
 export interface MaintenanceContractRow {
   id: string;
   company_id: string;
@@ -479,67 +957,133 @@ export interface MaintenanceContractRow {
   description: string | null;
   start_date: string;
   end_date: string | null;
-  amount_ht: number;
-  vat_rate: number;
-  billing_frequency: string;
-  auto_renew: boolean;
-  notice_period_days: number;
+  recurrence_rule: string | null;
+  annual_amount: number;
   is_active: boolean;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface MaintenanceContractInsert extends Omit<MaintenanceContractRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type MaintenanceContractUpdate = Partial<Omit<MaintenanceContractInsert, 'company_id'>>;
 
-// ─── ScheduleEvent ────────────────────────────────────────────────────────────
+export interface MaintenanceContractInsert {
+  id?: string;
+  company_id: string;
+  client_id: string;
+  site_address_id?: string | null;
+  contract_number: string;
+  title: string;
+  description?: string | null;
+  start_date: string;
+  end_date?: string | null;
+  recurrence_rule?: string | null;
+  annual_amount?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface MaintenanceContractUpdate {
+  company_id?: string;
+  client_id?: string;
+  site_address_id?: string | null;
+  contract_number?: string;
+  title?: string;
+  description?: string | null;
+  start_date?: string;
+  end_date?: string | null;
+  recurrence_rule?: string | null;
+  annual_amount?: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: schedule_event
+// =============================================================================
+
 export interface ScheduleEventRow {
   id: string;
   company_id: string;
   event_type: ScheduleEventType;
   title: string;
   description: string | null;
-  client_id: string | null;
-  site_address_id: string | null;
-  quote_id: string | null;
-  invoice_id: string | null;
-  intervention_id: string | null;
-  contract_id: string | null;
   start_datetime: string;
-  end_datetime: string;
+  end_datetime: string | null;
   all_day: boolean;
+  site_address_id: string | null;
+  client_id: string | null;
+  status: string;
   color: string | null;
   recurrence_rule: string | null;
-  notes: string | null;
+  locked: boolean;
   created_by: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ScheduleEventInsert extends Omit<ScheduleEventRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ScheduleEventUpdate = Partial<Omit<ScheduleEventInsert, 'company_id'>>;
 
-// ─── ScheduleEventEmployee ────────────────────────────────────────────────────
+export interface ScheduleEventInsert {
+  id?: string;
+  company_id: string;
+  event_type?: ScheduleEventType;
+  title: string;
+  description?: string | null;
+  start_datetime: string;
+  end_datetime?: string | null;
+  all_day?: boolean;
+  site_address_id?: string | null;
+  client_id?: string | null;
+  status?: string;
+  color?: string | null;
+  recurrence_rule?: string | null;
+  locked?: boolean;
+  created_by: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ScheduleEventUpdate {
+  company_id?: string;
+  event_type?: ScheduleEventType;
+  title?: string;
+  description?: string | null;
+  start_datetime?: string;
+  end_datetime?: string | null;
+  all_day?: boolean;
+  site_address_id?: string | null;
+  client_id?: string | null;
+  status?: string;
+  color?: string | null;
+  recurrence_rule?: string | null;
+  locked?: boolean;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: schedule_event_employee
+// =============================================================================
+
 export interface ScheduleEventEmployeeRow {
   id: string;
   schedule_event_id: string;
   employee_id: string;
-  created_at: string;
+  created_at: string | null;
 }
-export interface ScheduleEventEmployeeInsert extends Omit<ScheduleEventEmployeeRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type ScheduleEventEmployeeUpdate = Partial<Omit<ScheduleEventEmployeeInsert, 'schedule_event_id'>>;
 
-// ─── Intervention ─────────────────────────────────────────────────────────────
+export interface ScheduleEventEmployeeInsert {
+  id?: string;
+  schedule_event_id: string;
+  employee_id: string;
+  created_at?: string | null;
+}
+
+export interface ScheduleEventEmployeeUpdate {
+  schedule_event_id?: string;
+  employee_id?: string;
+}
+
+// =============================================================================
+// TABLE: intervention
+// =============================================================================
+
 export interface InterventionRow {
   id: string;
   company_id: string;
@@ -559,17 +1103,57 @@ export interface InterventionRow {
   client_signature_url: string | null;
   signed_at: string | null;
   created_by: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface InterventionInsert extends Omit<InterventionRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type InterventionUpdate = Partial<Omit<InterventionInsert, 'company_id'>>;
 
-// ─── InterventionLine ─────────────────────────────────────────────────────────
+export interface InterventionInsert {
+  id?: string;
+  company_id: string;
+  client_id: string;
+  site_address_id?: string | null;
+  schedule_event_id?: string | null;
+  contract_id?: string | null;
+  invoice_id?: string | null;
+  intervention_number: string;
+  title: string;
+  description?: string | null;
+  start_datetime: string;
+  end_datetime?: string | null;
+  duration_minutes?: number | null;
+  status?: string;
+  notes?: string | null;
+  client_signature_url?: string | null;
+  signed_at?: string | null;
+  created_by: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface InterventionUpdate {
+  company_id?: string;
+  client_id?: string;
+  site_address_id?: string | null;
+  schedule_event_id?: string | null;
+  contract_id?: string | null;
+  invoice_id?: string | null;
+  intervention_number?: string;
+  title?: string;
+  description?: string | null;
+  start_datetime?: string;
+  end_datetime?: string | null;
+  duration_minutes?: number | null;
+  status?: string;
+  notes?: string | null;
+  client_signature_url?: string | null;
+  signed_at?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: intervention_line
+// =============================================================================
+
 export interface InterventionLineRow {
   id: string;
   intervention_id: string;
@@ -580,434 +1164,720 @@ export interface InterventionLineRow {
   unit_price: number;
   vat_rate: number;
   total_ht: number;
-  created_at: string;
+  created_at: string | null;
 }
-export interface InterventionLineInsert extends Omit<InterventionLineRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type InterventionLineUpdate = Partial<Omit<InterventionLineInsert, 'intervention_id'>>;
 
-// ─── WeatherSnapshot ──────────────────────────────────────────────────────────
+export interface InterventionLineInsert {
+  id?: string;
+  intervention_id: string;
+  item_id?: string | null;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  vat_rate?: number;
+  total_ht?: number;
+  created_at?: string | null;
+}
+
+export interface InterventionLineUpdate {
+  intervention_id?: string;
+  item_id?: string | null;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  vat_rate?: number;
+  total_ht?: number;
+}
+
+// =============================================================================
+// TABLE: weather_snapshot
+// =============================================================================
+
 export interface WeatherSnapshotRow {
   id: string;
   company_id: string;
-  site_address_id: string | null;
-  latitude: number;
-  longitude: number;
-  recorded_at: string;
-  temperature_c: number | null;
-  feels_like_c: number | null;
-  humidity_percent: number | null;
-  wind_speed_kmh: number | null;
-  wind_direction: string | null;
+  site_address_id: string;
+  forecast_date: string;
+  fetched_at: string;
+  temp_min: number | null;
+  temp_max: number | null;
   precipitation_mm: number | null;
-  condition: string | null;
-  severity: WeatherSeverity | null;
+  wind_kmh: number | null;
+  condition_code: string | null;
+  condition_label: string | null;
+  severity: WeatherSeverity;
   raw_data: Record<string, unknown> | null;
-  created_at: string;
+  created_at: string | null;
 }
-export interface WeatherSnapshotInsert extends Omit<WeatherSnapshotRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type WeatherSnapshotUpdate = Partial<Omit<WeatherSnapshotInsert, 'company_id'>>;
 
-// ─── RouteEstimate ────────────────────────────────────────────────────────────
+export interface WeatherSnapshotInsert {
+  id?: string;
+  company_id: string;
+  site_address_id: string;
+  forecast_date: string;
+  fetched_at?: string;
+  temp_min?: number | null;
+  temp_max?: number | null;
+  precipitation_mm?: number | null;
+  wind_kmh?: number | null;
+  condition_code?: string | null;
+  condition_label?: string | null;
+  severity?: WeatherSeverity;
+  raw_data?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+export interface WeatherSnapshotUpdate {
+  company_id?: string;
+  site_address_id?: string;
+  forecast_date?: string;
+  fetched_at?: string;
+  temp_min?: number | null;
+  temp_max?: number | null;
+  precipitation_mm?: number | null;
+  wind_kmh?: number | null;
+  condition_code?: string | null;
+  condition_label?: string | null;
+  severity?: WeatherSeverity;
+  raw_data?: Record<string, unknown> | null;
+}
+
+// =============================================================================
+// TABLE: route_estimate
+// =============================================================================
+
 export interface RouteEstimateRow {
   id: string;
   company_id: string;
-  schedule_event_id: string | null;
-  origin_address: string;
-  destination_address: string;
+  origin_address_id: string;
+  destination_address_id: string;
   distance_km: number | null;
   duration_minutes: number | null;
-  polyline: string | null;
-  provider: string | null;
-  raw_data: Record<string, unknown> | null;
-  created_at: string;
+  calculated_at: string;
+  created_at: string | null;
 }
-export interface RouteEstimateInsert extends Omit<RouteEstimateRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type RouteEstimateUpdate = Partial<Omit<RouteEstimateInsert, 'company_id'>>;
 
-// ─── Payment ──────────────────────────────────────────────────────────────────
+export interface RouteEstimateInsert {
+  id?: string;
+  company_id: string;
+  origin_address_id: string;
+  destination_address_id: string;
+  distance_km?: number | null;
+  duration_minutes?: number | null;
+  calculated_at?: string;
+  created_at?: string | null;
+}
+
+export interface RouteEstimateUpdate {
+  company_id?: string;
+  origin_address_id?: string;
+  destination_address_id?: string;
+  distance_km?: number | null;
+  duration_minutes?: number | null;
+  calculated_at?: string;
+}
+
+// =============================================================================
+// TABLE: payment
+// =============================================================================
+
 export interface PaymentRow {
   id: string;
   company_id: string;
   invoice_id: string;
   amount: number;
-  payment_method: PaymentMethod;
   payment_date: string;
+  method: PaymentMethod;
   reference: string | null;
   notes: string | null;
   created_by: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
 }
-export interface PaymentInsert extends Omit<PaymentRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type PaymentUpdate = Partial<Omit<PaymentInsert, 'company_id' | 'invoice_id'>>;
 
-// ─── PaymentLink ──────────────────────────────────────────────────────────────
+export interface PaymentInsert {
+  id?: string;
+  company_id: string;
+  invoice_id: string;
+  amount: number;
+  payment_date: string;
+  method?: PaymentMethod;
+  reference?: string | null;
+  notes?: string | null;
+  created_by: string;
+  created_at?: string | null;
+}
+
+export interface PaymentUpdate {
+  company_id?: string;
+  invoice_id?: string;
+  amount?: number;
+  payment_date?: string;
+  method?: PaymentMethod;
+  reference?: string | null;
+  notes?: string | null;
+}
+
+// =============================================================================
+// TABLE: payment_link
+// =============================================================================
+
 export interface PaymentLinkRow {
   id: string;
   company_id: string;
   invoice_id: string;
   token: string;
   amount: number;
-  provider: string;
-  provider_payment_id: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_checkout_session_id: string | null;
   status: string;
   expires_at: string | null;
   paid_at: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
 }
-export interface PaymentLinkInsert extends Omit<PaymentLinkRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type PaymentLinkUpdate = Partial<Omit<PaymentLinkInsert, 'company_id' | 'invoice_id'>>;
 
-// ─── ReminderWorkflow ─────────────────────────────────────────────────────────
+export interface PaymentLinkInsert {
+  id?: string;
+  company_id: string;
+  invoice_id: string;
+  token: string;
+  amount: number;
+  stripe_payment_intent_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  status?: string;
+  expires_at?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface PaymentLinkUpdate {
+  company_id?: string;
+  invoice_id?: string;
+  token?: string;
+  amount?: number;
+  stripe_payment_intent_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  status?: string;
+  expires_at?: string | null;
+  paid_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: reminder_workflow
+// =============================================================================
+
 export interface ReminderWorkflowRow {
   id: string;
   company_id: string;
-  name: string;
+  invoice_id: string;
+  current_level: ReminderLevel;
   is_active: boolean;
-  trigger_days_overdue: number;
-  level: ReminderLevel;
-  channel: string;
-  created_at: string;
-  updated_at: string;
+  next_reminder_at: string | null;
+  stopped_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface ReminderWorkflowInsert extends Omit<ReminderWorkflowRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type ReminderWorkflowUpdate = Partial<Omit<ReminderWorkflowInsert, 'company_id'>>;
 
-// ─── ReminderMessage ──────────────────────────────────────────────────────────
-export interface ReminderMessageRow {
-  id: string;
+export interface ReminderWorkflowInsert {
+  id?: string;
   company_id: string;
   invoice_id: string;
-  workflow_id: string | null;
+  current_level?: ReminderLevel;
+  is_active?: boolean;
+  next_reminder_at?: string | null;
+  stopped_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ReminderWorkflowUpdate {
+  company_id?: string;
+  invoice_id?: string;
+  current_level?: ReminderLevel;
+  is_active?: boolean;
+  next_reminder_at?: string | null;
+  stopped_at?: string | null;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: reminder_message
+// =============================================================================
+
+export interface ReminderMessageRow {
+  id: string;
+  workflow_id: string;
   level: ReminderLevel;
   channel: string;
-  recipient_email: string | null;
   subject: string | null;
-  body: string | null;
+  body: string;
   sent_at: string | null;
-  status: string;
-  created_at: string;
+  delivered: boolean;
+  opened: boolean;
+  created_at: string | null;
 }
-export interface ReminderMessageInsert extends Omit<ReminderMessageRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type ReminderMessageUpdate = Partial<Omit<ReminderMessageInsert, 'company_id' | 'invoice_id'>>;
 
-// ─── AiAgentRun ───────────────────────────────────────────────────────────────
+export interface ReminderMessageInsert {
+  id?: string;
+  workflow_id: string;
+  level: ReminderLevel;
+  channel: string;
+  subject?: string | null;
+  body: string;
+  sent_at?: string | null;
+  delivered?: boolean;
+  opened?: boolean;
+  created_at?: string | null;
+}
+
+export interface ReminderMessageUpdate {
+  workflow_id?: string;
+  level?: ReminderLevel;
+  channel?: string;
+  subject?: string | null;
+  body?: string;
+  sent_at?: string | null;
+  delivered?: boolean;
+  opened?: boolean;
+}
+
+// =============================================================================
+// TABLE: ai_agent_run
+// =============================================================================
+
 export interface AiAgentRunRow {
   id: string;
   company_id: string;
   agent_type: AiAgentType;
-  triggered_by: string | null;
+  status: string;
   input_data: Record<string, unknown> | null;
   output_data: Record<string, unknown> | null;
-  status: string;
   error_message: string | null;
-  tokens_used: number | null;
+  started_at: string | null;
+  completed_at: string | null;
   duration_ms: number | null;
-  created_at: string;
-  updated_at: string;
+  tokens_used: number;
+  created_at: string | null;
 }
-export interface AiAgentRunInsert extends Omit<AiAgentRunRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type AiAgentRunUpdate = Partial<Omit<AiAgentRunInsert, 'company_id'>>;
 
-// ─── AiProposal ───────────────────────────────────────────────────────────────
+export interface AiAgentRunInsert {
+  id?: string;
+  company_id: string;
+  agent_type: AiAgentType;
+  status?: string;
+  input_data?: Record<string, unknown> | null;
+  output_data?: Record<string, unknown> | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  tokens_used?: number;
+  created_at?: string | null;
+}
+
+export interface AiAgentRunUpdate {
+  company_id?: string;
+  agent_type?: AiAgentType;
+  status?: string;
+  input_data?: Record<string, unknown> | null;
+  output_data?: Record<string, unknown> | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  tokens_used?: number;
+}
+
+// =============================================================================
+// TABLE: ai_proposal
+// =============================================================================
+
 export interface AiProposalRow {
   id: string;
   company_id: string;
-  agent_run_id: string | null;
+  agent_run_id: string;
   entity_type: string;
-  entity_id: string | null;
-  proposal_type: string;
-  content: Record<string, unknown>;
-  is_applied: boolean;
-  applied_at: string | null;
-  applied_by: string | null;
-  created_at: string;
+  entity_id: string;
+  title: string;
+  description: string | null;
+  proposed_action: Record<string, unknown>;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string | null;
 }
-export interface AiProposalInsert extends Omit<AiProposalRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type AiProposalUpdate = Partial<Omit<AiProposalInsert, 'company_id'>>;
 
-// ─── AuditLog ─────────────────────────────────────────────────────────────────
+export interface AiProposalInsert {
+  id?: string;
+  company_id: string;
+  agent_run_id: string;
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  description?: string | null;
+  proposed_action: Record<string, unknown>;
+  status?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface AiProposalUpdate {
+  company_id?: string;
+  agent_run_id?: string;
+  entity_type?: string;
+  entity_id?: string;
+  title?: string;
+  description?: string | null;
+  proposed_action?: Record<string, unknown>;
+  status?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+// =============================================================================
+// TABLE: audit_log
+// =============================================================================
+
 export interface AuditLogRow {
   id: string;
   company_id: string;
   user_id: string | null;
-  action: string;
   entity_type: string;
-  entity_id: string | null;
-  old_data: Record<string, unknown> | null;
-  new_data: Record<string, unknown> | null;
+  entity_id: string;
+  action: string;
+  changes: Record<string, unknown> | null;
   ip_address: string | null;
-  user_agent: string | null;
-  created_at: string;
+  created_at: string | null;
 }
-export interface AuditLogInsert extends Omit<AuditLogRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type AuditLogUpdate = Partial<Omit<AuditLogInsert, 'company_id'>>;
 
-// ─── DocumentAttachment ───────────────────────────────────────────────────────
+export interface AuditLogInsert {
+  id?: string;
+  company_id: string;
+  user_id?: string | null;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  changes?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  created_at?: string | null;
+}
+
+export interface AuditLogUpdate {
+  company_id?: string;
+  user_id?: string | null;
+  entity_type?: string;
+  entity_id?: string;
+  action?: string;
+  changes?: Record<string, unknown> | null;
+  ip_address?: string | null;
+}
+
+// =============================================================================
+// TABLE: document_attachment
+// =============================================================================
+
 export interface DocumentAttachmentRow {
   id: string;
   company_id: string;
   entity_type: DocumentType;
   entity_id: string;
   file_name: string;
-  file_url: string;
-  file_size: number | null;
+  file_path: string;
+  file_size: number;
   mime_type: string | null;
-  uploaded_by: string | null;
-  created_at: string;
+  version: number;
+  uploaded_by: string;
+  created_at: string | null;
 }
-export interface DocumentAttachmentInsert extends Omit<DocumentAttachmentRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type DocumentAttachmentUpdate = Partial<Omit<DocumentAttachmentInsert, 'company_id'>>;
 
-// ─── Notification ─────────────────────────────────────────────────────────────
+export interface DocumentAttachmentInsert {
+  id?: string;
+  company_id: string;
+  entity_type: DocumentType;
+  entity_id: string;
+  file_name: string;
+  file_path: string;
+  file_size?: number;
+  mime_type?: string | null;
+  version?: number;
+  uploaded_by: string;
+  created_at?: string | null;
+}
+
+export interface DocumentAttachmentUpdate {
+  company_id?: string;
+  entity_type?: DocumentType;
+  entity_id?: string;
+  file_name?: string;
+  file_path?: string;
+  file_size?: number;
+  mime_type?: string | null;
+  version?: number;
+  uploaded_by?: string;
+}
+
+// =============================================================================
+// TABLE: notification
+// =============================================================================
+
 export interface NotificationRow {
   id: string;
   company_id: string;
   user_id: string;
   title: string;
   body: string | null;
-  type: string;
-  entity_type: string | null;
-  entity_id: string | null;
+  link: string | null;
   is_read: boolean;
-  read_at: string | null;
-  created_at: string;
+  created_at: string | null;
 }
-export interface NotificationInsert extends Omit<NotificationRow, 'id' | 'created_at'> {
-  id?: string;
-  created_at?: string;
-}
-export type NotificationUpdate = Partial<Omit<NotificationInsert, 'company_id' | 'user_id'>>;
 
-// ─── CompanySettings ──────────────────────────────────────────────────────────
+export interface NotificationInsert {
+  id?: string;
+  company_id: string;
+  user_id: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  is_read?: boolean;
+  created_at?: string | null;
+}
+
+export interface NotificationUpdate {
+  company_id?: string;
+  user_id?: string;
+  title?: string;
+  body?: string | null;
+  link?: string | null;
+  is_read?: boolean;
+}
+
+// =============================================================================
+// TABLE: company_settings
+// =============================================================================
+
 export interface CompanySettingsRow {
   id: string;
   company_id: string;
-  key: string;
-  value: unknown;
-  created_at: string;
-  updated_at: string;
+  default_vat_rate: number;
+  default_payment_terms: number;
+  quote_validity_days: number;
+  invoice_prefix: string;
+  quote_prefix: string;
+  reminder_enabled: boolean;
+  reminder_schedule: Record<string, unknown>;
+  working_hours: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
 }
-export interface CompanySettingsInsert extends Omit<CompanySettingsRow, 'id' | 'created_at' | 'updated_at'> {
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-export type CompanySettingsUpdate = Partial<Omit<CompanySettingsInsert, 'company_id'>>;
 
-// ─── Database Interface ───────────────────────────────────────────────────────
+export interface CompanySettingsInsert {
+  id?: string;
+  company_id: string;
+  default_vat_rate?: number;
+  default_payment_terms?: number;
+  quote_validity_days?: number;
+  invoice_prefix?: string;
+  quote_prefix?: string;
+  reminder_enabled?: boolean;
+  reminder_schedule?: Record<string, unknown>;
+  working_hours?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CompanySettingsUpdate {
+  company_id?: string;
+  default_vat_rate?: number;
+  default_payment_terms?: number;
+  quote_validity_days?: number;
+  invoice_prefix?: string;
+  quote_prefix?: string;
+  reminder_enabled?: boolean;
+  reminder_schedule?: Record<string, unknown>;
+  working_hours?: Record<string, unknown>;
+  updated_at?: string | null;
+}
+
+// =============================================================================
+// DATABASE INTERFACE
+// =============================================================================
+
 export interface Database {
   public: {
     Tables: {
-      companies: {
+      company: {
         Row: CompanyRow;
         Insert: CompanyInsert;
         Update: CompanyUpdate;
       };
-      user_profiles: {
+      user_profile: {
         Row: UserProfileRow;
         Insert: UserProfileInsert;
         Update: UserProfileUpdate;
       };
-      employees: {
+      employee: {
         Row: EmployeeRow;
         Insert: EmployeeInsert;
         Update: EmployeeUpdate;
       };
-      clients: {
+      client: {
         Row: ClientRow;
         Insert: ClientInsert;
         Update: ClientUpdate;
       };
-      client_contacts: {
+      client_contact: {
         Row: ClientContactRow;
         Insert: ClientContactInsert;
         Update: ClientContactUpdate;
       };
-      site_addresses: {
+      site_address: {
         Row: SiteAddressRow;
         Insert: SiteAddressInsert;
         Update: SiteAddressUpdate;
       };
-      price_categories: {
+      price_category: {
         Row: PriceCategoryRow;
         Insert: PriceCategoryInsert;
         Update: PriceCategoryUpdate;
       };
-      item_families: {
+      item_family: {
         Row: ItemFamilyRow;
         Insert: ItemFamilyInsert;
         Update: ItemFamilyUpdate;
       };
-      items: {
+      item: {
         Row: ItemRow;
         Insert: ItemInsert;
         Update: ItemUpdate;
       };
-      work_units: {
+      work_unit: {
         Row: WorkUnitRow;
         Insert: WorkUnitInsert;
         Update: WorkUnitUpdate;
       };
-      work_unit_lines: {
+      work_unit_line: {
         Row: WorkUnitLineRow;
         Insert: WorkUnitLineInsert;
         Update: WorkUnitLineUpdate;
       };
-      quotes: {
+      quote: {
         Row: QuoteRow;
         Insert: QuoteInsert;
         Update: QuoteUpdate;
       };
-      quote_lines: {
+      quote_line: {
         Row: QuoteLineRow;
         Insert: QuoteLineInsert;
         Update: QuoteLineUpdate;
       };
-      invoices: {
+      invoice: {
         Row: InvoiceRow;
         Insert: InvoiceInsert;
         Update: InvoiceUpdate;
       };
-      invoice_lines: {
+      invoice_line: {
         Row: InvoiceLineRow;
         Insert: InvoiceLineInsert;
         Update: InvoiceLineUpdate;
       };
-      deposit_invoices: {
+      deposit_invoice: {
         Row: DepositInvoiceRow;
         Insert: DepositInvoiceInsert;
         Update: DepositInvoiceUpdate;
       };
-      progress_invoices: {
+      progress_invoice: {
         Row: ProgressInvoiceRow;
         Insert: ProgressInvoiceInsert;
         Update: ProgressInvoiceUpdate;
       };
-      delivery_notes: {
+      delivery_note: {
         Row: DeliveryNoteRow;
         Insert: DeliveryNoteInsert;
         Update: DeliveryNoteUpdate;
       };
-      delivery_note_lines: {
+      delivery_note_line: {
         Row: DeliveryNoteLineRow;
         Insert: DeliveryNoteLineInsert;
         Update: DeliveryNoteLineUpdate;
       };
-      maintenance_contracts: {
+      maintenance_contract: {
         Row: MaintenanceContractRow;
         Insert: MaintenanceContractInsert;
         Update: MaintenanceContractUpdate;
       };
-      schedule_events: {
+      schedule_event: {
         Row: ScheduleEventRow;
         Insert: ScheduleEventInsert;
         Update: ScheduleEventUpdate;
       };
-      schedule_event_employees: {
+      schedule_event_employee: {
         Row: ScheduleEventEmployeeRow;
         Insert: ScheduleEventEmployeeInsert;
         Update: ScheduleEventEmployeeUpdate;
       };
-      interventions: {
+      intervention: {
         Row: InterventionRow;
         Insert: InterventionInsert;
         Update: InterventionUpdate;
       };
-      intervention_lines: {
+      intervention_line: {
         Row: InterventionLineRow;
         Insert: InterventionLineInsert;
         Update: InterventionLineUpdate;
       };
-      weather_snapshots: {
+      weather_snapshot: {
         Row: WeatherSnapshotRow;
         Insert: WeatherSnapshotInsert;
         Update: WeatherSnapshotUpdate;
       };
-      route_estimates: {
+      route_estimate: {
         Row: RouteEstimateRow;
         Insert: RouteEstimateInsert;
         Update: RouteEstimateUpdate;
       };
-      payments: {
+      payment: {
         Row: PaymentRow;
         Insert: PaymentInsert;
         Update: PaymentUpdate;
       };
-      payment_links: {
+      payment_link: {
         Row: PaymentLinkRow;
         Insert: PaymentLinkInsert;
         Update: PaymentLinkUpdate;
       };
-      reminder_workflows: {
+      reminder_workflow: {
         Row: ReminderWorkflowRow;
         Insert: ReminderWorkflowInsert;
         Update: ReminderWorkflowUpdate;
       };
-      reminder_messages: {
+      reminder_message: {
         Row: ReminderMessageRow;
         Insert: ReminderMessageInsert;
         Update: ReminderMessageUpdate;
       };
-      ai_agent_runs: {
+      ai_agent_run: {
         Row: AiAgentRunRow;
         Insert: AiAgentRunInsert;
         Update: AiAgentRunUpdate;
       };
-      ai_proposals: {
+      ai_proposal: {
         Row: AiProposalRow;
         Insert: AiProposalInsert;
         Update: AiProposalUpdate;
       };
-      audit_logs: {
+      audit_log: {
         Row: AuditLogRow;
         Insert: AuditLogInsert;
         Update: AuditLogUpdate;
       };
-      document_attachments: {
+      document_attachment: {
         Row: DocumentAttachmentRow;
         Insert: DocumentAttachmentInsert;
         Update: DocumentAttachmentUpdate;
       };
-      notifications: {
+      notification: {
         Row: NotificationRow;
         Insert: NotificationInsert;
         Update: NotificationUpdate;
@@ -1018,8 +1888,6 @@ export interface Database {
         Update: CompanySettingsUpdate;
       };
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
     Enums: {
       user_role: UserRole;
       client_type: ClientType;

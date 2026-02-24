@@ -35,7 +35,7 @@ export function useClients(): UseClientsReturn {
 
       try {
         let query = supabase
-          .from('clients')
+          .from('client')
           .select('*')
           .eq('company_id', companyId)
           .order('created_at', { ascending: false });
@@ -50,7 +50,7 @@ export function useClients(): UseClientsReturn {
 
         if (filters?.search && filters.search.trim().length > 0) {
           const term = `%${filters.search.trim()}%`;
-          query = query.or(`name.ilike.${term},email.ilike.${term}`);
+          query = query.or(`company_name.ilike.${term},email.ilike.${term}`);
         }
 
         const { data, error: fetchError } = await query;
@@ -75,7 +75,7 @@ export function useClients(): UseClientsReturn {
     async (data: ClientInsert): Promise<{ data: ClientRow | null; error: string | null }> => {
       try {
         const { data: created, error: insertError } = await supabase
-          .from('clients')
+          .from('client')
           .insert(data)
           .select()
           .single();
@@ -101,7 +101,7 @@ export function useClients(): UseClientsReturn {
     async (id: string, data: ClientUpdate): Promise<{ data: ClientRow | null; error: string | null }> => {
       try {
         const { data: updated, error: updateError } = await supabase
-          .from('clients')
+          .from('client')
           .update(data)
           .eq('id', id)
           .select()
@@ -128,7 +128,7 @@ export function useClients(): UseClientsReturn {
     async (id: string): Promise<{ error: string | null }> => {
       try {
         const { error: deleteError } = await supabase
-          .from('clients')
+          .from('client')
           .delete()
           .eq('id', id);
 
@@ -154,10 +154,10 @@ export function useClients(): UseClientsReturn {
       try {
         const term = `%${query.trim()}%`;
         const { data, error: searchError } = await supabase
-          .from('clients')
+          .from('client')
           .select('*')
           .eq('company_id', companyId)
-          .or(`name.ilike.${term},email.ilike.${term}`)
+          .or(`company_name.ilike.${term},email.ilike.${term}`)
           .order('name', { ascending: true })
           .limit(20);
 

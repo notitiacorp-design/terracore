@@ -62,7 +62,7 @@ export function useDocuments(): UseDocumentsReturn {
 
       try {
         let query = supabase
-          .from('quotes')
+          .from('quote')
           .select(`
             *,
             client:clients!quotes_client_id_fkey (
@@ -103,7 +103,7 @@ export function useDocuments(): UseDocumentsReturn {
 
       try {
         let query = supabase
-          .from('invoices')
+          .from('invoice')
           .select(`
             *,
             client:clients!invoices_client_id_fkey (
@@ -141,7 +141,7 @@ export function useDocuments(): UseDocumentsReturn {
     async (data: QuoteInsert): Promise<{ data: QuoteRow | null; error: string | null }> => {
       try {
         const { data: created, error: insertError } = await supabase
-          .from('quotes')
+          .from('quote')
           .insert(data)
           .select()
           .single();
@@ -168,7 +168,7 @@ export function useDocuments(): UseDocumentsReturn {
     async (id: string, data: QuoteUpdate): Promise<{ data: QuoteRow | null; error: string | null }> => {
       try {
         const { data: updated, error: updateError } = await supabase
-          .from('quotes')
+          .from('quote')
           .update(data)
           .eq('id', id)
           .select()

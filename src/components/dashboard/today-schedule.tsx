@@ -79,7 +79,7 @@ export function TodaySchedule() {
         const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
         const { data, error: fetchError } = await supabase
-          .from("schedule_events")
+          .from('schedule_event')
           .select(
             `
             id,
