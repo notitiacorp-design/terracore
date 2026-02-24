@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json.schemastore.org/eslintrc",
+  "root": true,
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/consistent-type-imports": [
+      "error",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "inline-type-imports"
+      }
+    ],
+    "@typescript-eslint/no-import-type-side-effects": "error",
+    "react/jsx-curly-brace-presence": [
+      "warn",
+      {
+        "props": "never",
+        "children": "never"
+      }
+    ],
+    "react/self-closing-comp": [
+      "warn",
+      {
+        "component": true,
+        "html": true
+      }
+    ],
+    "import/order": [
+      "warn",
+      {
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          "parent",
+          "sibling",
+          "index",
+          "object",
+          "type"
+        ],
+        "newlines-between": "always",
+        "alphabetize": {
+          "order": "asc",
+          "caseInsensitive": true
+        }
+      }
+    ],
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error"]
+      }
+    ],
+    "prefer-const": "error",
+    "no-var": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "out/",
+    "public/",
+    "*.config.js",
+    "*.config.ts",
+    "postcss.config.js"
+  ]
+}

@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 5% 11%;
+    --card: 210 17% 98%;
+    --card-foreground: 240 5% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 5% 11%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 160 84% 39%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 7% 7%;
+    --foreground: 240 5% 90%;
+    --card: 240 15% 14%;
+    --card-foreground: 240 5% 90%;
+    --popover: 240 15% 14%;
+    --popover-foreground: 240 5% 90%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 240 5% 65%;
+    --muted: 222 47% 11%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 222 47% 11%;
+    --accent-foreground: 240 5% 65%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 9% 20%;
+    --input: 240 9% 20%;
+    --ring: 160 84% 39%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    min-height: 100vh;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/40;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/70;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.4) hsl(var(--muted));
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-primary;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  a {
+    @apply text-primary underline-offset-4;
+    transition: color 0.15s ease;
+  }
+
+  a:hover {
+    @apply text-primary/80;
+  }
+
+  input, textarea, select {
+    @apply focus:outline-none;
+  }
+}
+
+@layer utilities {
+  .ai-glow {
+    box-shadow: 0 0 16px 2px hsl(var(--primary) / 0.35), 0 0 4px 1px hsl(var(--primary) / 0.2);
+  }
+
+  .ai-glow-text {
+    text-shadow: 0 0 12px hsl(var(--primary) / 0.6);
+  }
+
+  .glass {
+    backdrop-filter: blur(12px) saturate(180%);
+    background-color: hsl(var(--card) / 0.7);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  .gradient-emerald {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  }
+
+  .animate-in {
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
