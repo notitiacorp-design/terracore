@@ -124,7 +124,6 @@ export default function RegisterPage() {
         .insert([
           {
             name: values.companyName,
-            owner_id: userId,
           },
         ])
         .select("id")
@@ -146,9 +145,8 @@ export default function RegisterPage() {
             id: userId,
             first_name: values.firstName,
             last_name: values.lastName,
-            email: values.email,
             company_id: companyId,
-            role: "owner",
+            role: "admin",
           },
         ]);
 

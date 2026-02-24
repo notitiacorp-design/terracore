@@ -31,7 +31,7 @@ const contactSchema = z.object({
   last_name: z.string().optional(),
   email: z.string().email("Email invalide").optional().or(z.literal("")),
   phone: z.string().optional(),
-  role: z.string().optional(),
+  role_title: z.string().optional(),
 });
 
 const addressSchema = z.object({
@@ -45,7 +45,7 @@ const addressSchema = z.object({
 });
 
 export const clientFormSchema = z.object({
-  client_type: z.enum(["particulier", "professionnel"]),
+  client_type: z.enum(["particulier", "pro"]),
   company_name: z.string().optional(),
   first_name: z.string().optional(),
   last_name: z.string().optional(),
@@ -490,7 +490,7 @@ export function ClientForm({
                 />
                 <FormField
                   control={form.control}
-                  name={`contacts.${index}.role`}
+                  name={`contacts.${index}.role_title`}
                   render={({ field: f }) => (
                     <FormItem className="sm:col-span-2">
                       <FormLabel>Rôle / Fonction</FormLabel>

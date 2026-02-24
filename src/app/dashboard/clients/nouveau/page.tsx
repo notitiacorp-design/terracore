@@ -10,16 +10,31 @@ import type { ClientFormValues } from "@/components/clients/client-form";
 
 export default function NouveauClientPage() {
   const router = useRouter();
-  const { createClient, isCreating } = useClients();
+  const { createClient, loading } = useClients();
 
   const handleSubmit = async (values: ClientFormValues) => {
-    try {
-      const newClient = await createClient(values);
-      toast.success("Client créé avec succès !");
-      router.push(`/clients/${newClient.id}`);
-    } catch (err: any) {
-      toast.error(err?.message ?? "Erreur lors de la création du client");
+    // TODO: Get company_id from auth context
+    const companyId = "TODO_REPLACE_WITH_COMPANY_ID_FROM_AUTH";
+
+    const { data, error } = await createClient({
+      client_type: values.client_type,
+      company_name: values.company_name,
+      first_name: values.first_name,
+      last_name: values.last_name,
+      email: values.email,
+      phone: values.phone,
+      website: values.website,
+      notes: values.notes,
+      company_id: companyId,
+    });
+
+    if (error) {
+      toast.error(error ?? "Erreur lors de la création du client");
+      return;
     }
+
+    toast.success("Client créé avec succès !");
+    router.push(`/dashboard/clients/${data!.id}`);
   };
 
   return (
@@ -46,7 +61,7 @@ export default function NouveauClientPage() {
       {/* Form */}
       <ClientForm
         onSubmit={handleSubmit}
-        isLoading={isCreating}
+        isLoading={loading}
         submitLabel="Créer le client"
       />
     </div>

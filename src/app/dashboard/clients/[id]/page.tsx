@@ -22,38 +22,35 @@ import { Separator } from "@/components/ui/separator";
 import { ClientDetailHeader } from "@/components/clients/client-detail-header";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
+import type { ClientRow, ClientContactRow, SiteAddressRow, ScheduleEventRow, ReminderWorkflowRow, AuditLogRow, DocumentAttachmentRow } from "@/types/database";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
-type Client = Database["public"]["Tables"]["clients"]["Row"];
-type Document = Database["public"]["Tables"]["documents"]["Row"];
-type ScheduleEvent = Database["public"]["Tables"]["schedule_events"]["Row"];
-type ClientNote = Database["public"]["Tables"]["client_notes"]["Row"];
-type Contact = Database["public"]["Tables"]["contacts"]["Row"];
-type Address = Database["public"]["Tables"]["addresses"]["Row"];
-type ReminderWorkflow = Database["public"]["Tables"]["reminder_workflows"]["Row"];
-
 const DOC_STATUS_LABELS: Record<string, string> = {
-  draft: "Brouillon",
-  sent: "Envoyé",
-  accepted: "Accepté",
-  refused: "Refusé",
-  paid: "Payé",
-  overdue: "En retard",
-  partial: "Partiel",
-  cancelled: "Annulé",
+  brouillon: "Brouillon",
+  envoye: "Envoyé(e)",
+  envoyee: "Envoyé(e)",
+  accepte: "Accepté",
+  refuse: "Refusé",
+  expire: "Expiré",
+  payee: "Payé",
+  partiellement_payee: "Partiel",
+  en_retard: "En retard",
+  annulee: "Annulé",
 };
 
 const DOC_STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700 border-gray-200",
-  sent: "bg-blue-100 text-blue-700 border-blue-200",
-  accepted: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  refused: "bg-red-100 text-red-700 border-red-200",
-  paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  overdue: "bg-red-100 text-red-700 border-red-200",
-  partial: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+  brouillon: "bg-gray-100 text-gray-700 border-gray-200",
+  envoye: "bg-blue-100 text-blue-700 border-blue-200",
+  envoyee: "bg-blue-100 text-blue-700 border-blue-200",
+  accepte: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  refuse: "bg-red-100 text-red-700 border-red-200",
+  expire: "bg-red-100 text-red-700 border-red-200",
+  payee: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  partiellement_payee: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  en_retard: "bg-red-100 text-red-700 border-red-200",
+  annulee: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 const REMINDER_STATUS_LABELS: Record<string, string> = {
@@ -72,16 +69,16 @@ const REMINDER_STATUS_COLORS: Record<string, string> = {
 
 export default function ClientDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClient();
   const { id } = params;
 
-  const [client, setClient] = useState<Client | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [events, setEvents] = useState<ScheduleEvent[]>([]);
-  const [reminders, setReminders] = useState<ReminderWorkflow[]>([]);
-  const [notes, setNotes] = useState<ClientNote[]>([]);
+  const [client, setClient] = useState<ClientRow | null>(null);
+  const [contacts, setContacts] = useState<ClientContactRow[]>([]);
+  const [addresses, setAddresses] = useState<SiteAddressRow[]>([]);
+  const [documents, setDocuments] = useState<DocumentAttachmentRow[]>([]);
+  const [events, setEvents] = useState<ScheduleEventRow[]>([]);
+  const [reminders, setReminders] = useState<ReminderWorkflowRow[]>([]);
+  const [notes, setNotes] = useState<AuditLogRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [noteContent, setNoteContent] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -94,11 +91,11 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           await Promise.all([
             supabase.from("client").select("*").eq("id", id).single(),
             supabase.from("client_contact").select("*").eq("client_id", id).order("created_at"),
-            supabase.from("site_address").select("*").eq("client_id", id).order("is_billing", { ascending: false }),
-            supabase.from("document_attachment").select("*").eq("client_id", id).order("created_at", { ascending: false }),
-            supabase.from("schedule_event").select("*").eq("client_id", id).order("starts_at", { ascending: false }),
+            supabase.from("site_address").select("*").eq("client_id", id).order("is_billing_address", { ascending: false }),
+            supabase.from("document_attachment").select("*").eq("entity_type", "client").eq("entity_id", id).order("created_at", { ascending: false }),
+            supabase.from("schedule_event").select("*").eq("client_id", id).order("start_datetime", { ascending: false }),
             supabase.from("reminder_workflow").select("*").eq("client_id", id).order("created_at", { ascending: false }),
-            supabase.from("audit_log").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+            supabase.from("audit_log").select("*").eq("entity_type", "client").eq("entity_id", id).order("created_at", { ascending: false }),
           ]);
 
         if (clientRes.error) throw clientRes.error;
@@ -126,7 +123,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("audit_log")
-        .insert({ client_id: id, content: noteContent.trim(), created_by: user?.id ?? null })
+        .insert({ entity_type: "client", entity_id: id, content: noteContent.trim(), created_by: user?.id ?? null })
         .select()
         .single();
       if (error) throw error;
@@ -163,8 +160,8 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
 
   if (!client) return null;
 
-  const quotes = documents.filter((d) => d.type === "quote");
-  const invoices = documents.filter((d) => d.type === "invoice");
+  const quotes = documents.filter((d) => (d as any).type === "quote");
+  const invoices = documents.filter((d) => (d as any).type === "invoice");
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8">
@@ -235,8 +232,8 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                 {addresses.map((addr) => (
                   <div key={addr.id} className="p-4 rounded-lg border bg-muted/30 space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{addr.label ?? (addr.is_billing ? "Facturation" : "Site")}</span>
-                      {addr.is_billing && (
+                      <span className="font-medium text-sm">{addr.label ?? (addr.is_billing_address ? "Facturation" : "Site")}</span>
+                      {addr.is_billing_address && (
                         <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Facturation</Badge>
                       )}
                     </div>
@@ -278,7 +275,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                     <div className="flex-1">
                       <p className="font-medium">{ev.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        {ev.starts_at ? format(new Date(ev.starts_at), "d MMM yyyy à HH:mm", { locale: fr }) : "—"}
+                        {ev.start_datetime ? format(new Date(ev.start_datetime), "d MMM yyyy à HH:mm", { locale: fr }) : "—"}
                       </p>
                     </div>
                     {ev.status && (
@@ -348,7 +345,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
               ) : (
                 notes.map((note) => (
                   <div key={note.id} className="p-4 rounded-lg border bg-muted/30 space-y-1">
-                    <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                    <p className="text-sm whitespace-pre-wrap">{(note as any).content}</p>
                     <p className="text-xs text-muted-foreground">
                       {note.created_at ? format(new Date(note.created_at), "d MMM yyyy à HH:mm", { locale: fr }) : ""}
                     </p>
@@ -385,7 +382,7 @@ function DocumentSection({
   type,
 }: {
   title: string;
-  documents: Document[];
+  documents: DocumentAttachmentRow[];
   clientId: string;
   type: string;
 }) {
@@ -411,14 +408,14 @@ function DocumentSection({
               className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors"
             >
               <div>
-                <p className="text-sm font-medium">{doc.reference ?? `#${doc.id.slice(0, 8)}`}</p>
+                <p className="text-sm font-medium">{(doc as any).reference ?? `#${doc.id.slice(0, 8)}`}</p>
                 <p className="text-xs text-muted-foreground">
                   {doc.created_at ? format(new Date(doc.created_at), "d MMM yyyy", { locale: fr }) : ""}
-                  {doc.total_ttc != null ? ` — ${Number(doc.total_ttc).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}` : ""}
+                  {(doc as any).total_ttc != null ? ` — ${Number((doc as any).total_ttc).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}` : ""}
                 </p>
               </div>
-              <Badge variant="outline" className={`text-xs ${DOC_STATUS_COLORS[doc.status] ?? ""}`}>
-                {DOC_STATUS_LABELS[doc.status] ?? doc.status}
+              <Badge variant="outline" className={`text-xs ${DOC_STATUS_COLORS[(doc as any).status] ?? ""}`}>
+                {DOC_STATUS_LABELS[(doc as any).status] ?? (doc as any).status}
               </Badge>
             </Link>
           ))}

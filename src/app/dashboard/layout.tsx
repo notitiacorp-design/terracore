@@ -7,10 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
   FileText,
-  Receipt,
   Users,
   Briefcase,
-  Calendar,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -18,9 +16,7 @@ import {
   Bell,
   LogOut,
   Building2,
-  Wrench,
   TrendingUp,
-  Map,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,65 +40,42 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const navItems = [
   {
-    label: "Tableau de bord",
-    href: "/",
+    label: "Accueil",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    label: "Devis",
-    href: "/devis",
-    icon: FileText,
-  },
-  {
-    label: "Factures",
-    href: "/factures",
-    icon: Receipt,
+    label: "Clients",
+    href: "/dashboard/clients",
+    icon: Users,
   },
   {
     label: "Chantiers",
-    href: "/chantiers",
+    href: "/dashboard/chantiers",
     icon: Briefcase,
   },
   {
-    label: "Planification",
-    href: "/planification",
-    icon: Calendar,
+    label: "Documents",
+    href: "/dashboard/documents",
+    icon: FileText,
   },
   {
-    label: "Clients",
-    href: "/clients",
-    icon: Users,
-  },
-  {
-    label: "Employés",
-    href: "/employes",
-    icon: Users,
-  },
-  {
-    label: "Équipements",
-    href: "/equipements",
-    icon: Wrench,
-  },
-  {
-    label: "Carte",
-    href: "/carte",
-    icon: Map,
-  },
-  {
-    label: "Rapports",
-    href: "/rapports",
+    label: "Pilotage",
+    href: "/dashboard/pilotage",
     icon: TrendingUp,
-  },
-  {
-    label: "Paramètres",
-    href: "/parametres",
-    icon: Settings,
   },
 ];
 
+const settingsItem = {
+  label: "Paramètres",
+  href: "/dashboard/settings",
+  icon: Settings,
+};
+
 interface UserProfile {
   id: string;
-  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string | null;
   avatar_url: string | null;
   company_id: string | null;
@@ -115,6 +88,21 @@ interface SidebarProps {
   onToggle: () => void;
   profile: UserProfile | null;
   onSignOut: () => void;
+}
+
+function getFullName(profile: UserProfile | null): string {
+  if (!profile) return "Utilisateur";
+  const first = profile.first_name || "";
+  const last = profile.last_name || "";
+  const full = (first + " " + last).trim();
+  return full || "Utilisateur";
+}
+
+function getInitials(profile: UserProfile | null): string {
+  if (!profile) return "U";
+  const first = profile.first_name?.[0] || "";
+  const last = profile.last_name?.[0] || "";
+  return (first + last).toUpperCase() || "U";
 }
 
 function SidebarNav({
@@ -187,8 +175,8 @@ function SidebarNav({
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
         {navItems.map((item) => {
           const isActive =
-            item.href === "/"
-              ? pathname === "/"
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
           return (
             <Link
@@ -221,20 +209,13 @@ function SidebarNav({
           <Avatar className="w-8 h-8 flex-shrink-0">
             <AvatarImage src={profile?.avatar_url || undefined} />
             <AvatarFallback className="bg-emerald-600 text-white text-xs">
-              {profile?.full_name
-                ? profile.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2)
-                : "U"}
+              {getInitials(profile)}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {profile?.full_name || "Utilisateur"}
+                {getFullName(profile)}
               </p>
               <p className="text-xs text-gray-400 truncate">
                 {profile?.role || "Membre"}
@@ -286,8 +267,8 @@ function MobileNavContent({
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
         {navItems.map((item) => {
           const isActive =
-            item.href === "/"
-              ? pathname === "/"
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
           return (
             <Link
@@ -313,19 +294,12 @@ function MobileNavContent({
           <Avatar className="w-9 h-9">
             <AvatarImage src={profile?.avatar_url || undefined} />
             <AvatarFallback className="bg-emerald-600 text-white text-xs">
-              {profile?.full_name
-                ? profile.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2)
-                : "U"}
+              {getInitials(profile)}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">
-              {profile?.full_name || "Utilisateur"}
+              {getFullName(profile)}
             </p>
             <p className="text-xs text-gray-400 truncate">
               {profile?.email || ""}
@@ -374,25 +348,27 @@ export default function DashboardLayout({
 
         const { data: profileData } = await supabase
           .from("user_profile")
-          .select("*, companies(name)")
+          .select("*, company(name)")
           .eq("id", user.id)
           .single();
 
         if (profileData) {
           setProfile({
             id: profileData.id,
-            full_name: profileData.full_name,
+            first_name: profileData.first_name,
+            last_name: profileData.last_name,
             email: user.email || null,
             avatar_url: profileData.avatar_url,
             company_id: profileData.company_id,
             company_name:
-              (profileData.companies as { name: string } | null)?.name || null,
+              (profileData.company as { name: string } | null)?.name || null,
             role: profileData.role,
           });
         } else {
           setProfile({
             id: user.id,
-            full_name: user.user_metadata?.full_name || null,
+            first_name: user.user_metadata?.first_name || null,
+            last_name: user.user_metadata?.last_name || null,
             email: user.email || null,
             avatar_url: null,
             company_id: null,
@@ -417,8 +393,8 @@ export default function DashboardLayout({
 
   const currentPageLabel =
     navItems.find((item) =>
-      item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
-    )?.label || "Tableau de bord";
+      item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)
+    )?.label || "Accueil";
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -512,14 +488,7 @@ export default function DashboardLayout({
                   <Avatar className="w-8 h-8">
                     <AvatarImage src={profile?.avatar_url || undefined} />
                     <AvatarFallback className="bg-emerald-600 text-white text-xs">
-                      {profile?.full_name
-                        ? profile.full_name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)
-                        : "U"}
+                      {getInitials(profile)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:block text-left">
@@ -527,7 +496,7 @@ export default function DashboardLayout({
                       {loading ? (
                         <Skeleton className="h-3 w-20" />
                       ) : (
-                        profile?.full_name || "Utilisateur"
+                        getFullName(profile)
                       )}
                     </p>
                     <p className="text-xs text-gray-500 leading-tight">
@@ -542,14 +511,14 @@ export default function DashboardLayout({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
-                  <p className="text-sm font-medium">{profile?.full_name}</p>
+                  <p className="text-sm font-medium">{getFullName(profile)}</p>
                   <p className="text-xs text-gray-500 font-normal">
                     {profile?.email}
                   </p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/parametres">
+                  <Link href="/dashboard/settings">
                     <Settings className="mr-2 h-4 w-4" />
                     Paramètres
                   </Link>
