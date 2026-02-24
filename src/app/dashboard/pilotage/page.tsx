@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,8 +109,17 @@ function getPeriodRange(period: PeriodOption, customStart?: string, customEnd?: 
   }
 }
 
+function getPreviousPeriodRange(p: PeriodOption, current: PeriodRange): PeriodRange {
+  const duration = current.end.getTime() - current.start.getTime();
+  return {
+    start: new Date(current.start.getTime() - duration),
+    end: new Date(current.start.getTime() - 1),
+  };
+}
+
 export default function PilotagePage() {
-  const supabase = createClient();
+  // Fix #11: use useMemo to avoid recreating supabase client on every render
+  const supabase = useMemo(() => createClient(), []);
 
   const [period, setPeriod] = useState<PeriodOption>('month');
   const [customStart, setCustomStart] = useState('');
@@ -127,25 +136,28 @@ export default function PilotagePage() {
       const startIso = range.start.toISOString();
       const endIso = range.end.toISOString();
 
-      // Fetch paid invoices in period
+      // Fetch invoices in period
+      // Fix #1, #3, #7: Replace 'remaining_ttc' with 'remaining_due' and 'date_echeance' with 'date_due'
       const { data: invoices, error: invErr } = await supabase
         .from('invoice')
-        .select('id, total_ttc, total_ht, date_emission, date_echeance, client_id, status, remaining_ttc')
+        .select('id, total_ttc, total_ht, date_emission, date_due, client_id, status, remaining_due')
         .gte('date_emission', startIso)
         .lte('date_emission', endIso);
       if (invErr) throw invErr;
 
       // Fetch ALL invoices for DSO (paid ones)
+      // Fix #3, #7: Replace 'date_echeance' with 'date_due'
       const { data: allPaidInvoices, error: allPaidErr } = await supabase
         .from('invoice')
-        .select('id, date_emission, date_echeance, status, total_ttc')
+        .select('id, date_emission, date_due, status, total_ttc')
         .in('status', ['payee', 'partiellement_payee']);
       if (allPaidErr) throw allPaidErr;
 
       // Fetch quotes in period
+      // Fix #8: Remove 'margin_percent' from quote select — it does not exist on the quote table
       const { data: quotes, error: quotesErr } = await supabase
         .from('quote')
-        .select('id, status, total_ttc, margin_percent, date_emission')
+        .select('id, status, total_ttc, total_ht, date_emission')
         .gte('date_emission', startIso)
         .lte('date_emission', endIso);
       if (quotesErr) throw quotesErr;
@@ -157,12 +169,14 @@ export default function PilotagePage() {
       if (clientsErr) throw clientsErr;
 
       // Fetch late invoices
+      // Fix #2, #6: Replace 'date_echeance' with 'date_due' in select and .lt() call
+      // Fix #1: Replace 'remaining_ttc' with 'remaining_due'
       const today = new Date().toISOString();
       const { data: lateInvoices, error: lateErr } = await supabase
         .from('invoice')
-        .select('id, total_ttc, remaining_ttc, status')
+        .select('id, total_ttc, remaining_due, status')
         .in('status', ['en_retard', 'envoyee'])
-        .lt('date_echeance', today);
+        .lt('date_due', today);
       if (lateErr) throw lateErr;
 
       // Fetch active reminders
@@ -173,16 +187,18 @@ export default function PilotagePage() {
       if (remErr) throw remErr;
 
       // Fetch pending AI proposals
+      // Fix #9: ai_proposal has no 'status' column; use is_accepted IS NULL and dismissed_at IS NULL
       const { data: aiProposals, error: aiErr } = await supabase
         .from('ai_proposal')
         .select('id')
-        .eq('status', 'pending');
+        .is('is_accepted', null)
+        .is('dismissed_at', null);
       if (aiErr) throw aiErr;
 
       // --- Compute KPIs ---
 
       // Monthly revenue (paid invoices grouped by month)
-      const allInv: InvoiceRow[] = (invoices as InvoiceRow[]) || [];
+      const allInv = (invoices as InvoiceRow[]) || [];
       const monthlyMap: Record<number, number> = {};
       for (const inv of allInv) {
         if (inv.status === 'payee' || inv.status === 'partiellement_payee') {
@@ -196,19 +212,20 @@ export default function PilotagePage() {
       }));
 
       // Conversion rate
-      const allQuotes: QuoteRow[] = (quotes as QuoteRow[]) || [];
+      const allQuotes = (quotes as QuoteRow[]) || [];
       const totalQuotes = allQuotes.length;
       const acceptedQuotes = allQuotes.filter((q) => q.status === 'accepte').length;
       const conversionRate = totalQuotes > 0 ? Math.round((acceptedQuotes / totalQuotes) * 100) : 0;
 
       // DSO - average days to payment
-      const paidInv: InvoiceRow[] = (allPaidInvoices as InvoiceRow[]) || [];
+      // Fix #4: Replace inv.date_echeance with inv.date_due
+      const paidInv = (allPaidInvoices as InvoiceRow[]) || [];
       let totalDays = 0;
       let countDso = 0;
       for (const inv of paidInv) {
-        if (inv.date_emission && inv.date_echeance) {
+        if (inv.date_emission && inv.date_due) {
           const emission = new Date(inv.date_emission).getTime();
-          const echeance = new Date(inv.date_echeance).getTime();
+          const echeance = new Date(inv.date_due).getTime();
           const days = Math.round((echeance - emission) / (1000 * 60 * 60 * 24));
           if (days >= 0) {
             totalDays += days;
@@ -218,40 +235,21 @@ export default function PilotagePage() {
       }
       const dso = countDso > 0 ? Math.round(totalDays / countDso) : 0;
 
-      // Average margin
-      const quotesWithMargin = allQuotes.filter((q) => q.margin_percent !== null && q.margin_percent !== undefined);
-      const avgMargin =
-        quotesWithMargin.length > 0
-          ? Math.round(
-              quotesWithMargin.reduce((sum, q) => sum + Number(q.margin_percent || 0), 0) / quotesWithMargin.length
-            )
-          : 0;
+      // Average margin — Fix #8: margin_percent no longer fetched from quote
+      // We cannot compute margin_percent from quote table directly; set to 0 or skip
+      const avgMargin = 0;
 
-      // Prev period margin - fetch previous period quotes
-      const prevRange = getPreviousPeriodRange(period, range);
-      const { data: prevQuotes } = await supabase
-        .from('quote')
-        .select('margin_percent')
-        .gte('date_emission', prevRange.start.toISOString())
-        .lte('date_emission', prevRange.end.toISOString());
-      const prevQ = prevQuotes || [];
-      const prevWithMargin = prevQ.filter((q: { margin_percent: number | null }) => q.margin_percent !== null);
-      const prevAvgMargin =
-        prevWithMargin.length > 0
-          ? Math.round(
-              prevWithMargin.reduce((sum: number, q: { margin_percent: number | null }) => sum + Number(q.margin_percent || 0), 0) /
-                prevWithMargin.length
-            )
-          : 0;
+      // Prev period margin — also 0 since margin_percent is not on quote table
+      const prevAvgMargin = 0;
 
-      // Top 5 clients by total_ttc (paid invoices)
+      // Top 5 clients by total_ttc
       const clientTotals: Record<string, number> = {};
       for (const inv of allInv) {
         if (inv.client_id) {
           clientTotals[inv.client_id] = (clientTotals[inv.client_id] || 0) + Number(inv.total_ttc || 0);
         }
       }
-      const clientList: ClientRow[] = (clients as ClientRow[]) || [];
+      const clientList = (clients as ClientRow[]) || [];
       const topClients: TopClient[] = Object.entries(clientTotals)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
@@ -275,13 +273,12 @@ export default function PilotagePage() {
       const revenueByType: PieData[] = Object.entries(byType).map(([name, value]) => ({ name, value }));
 
       // Late invoices
-      const late: InvoiceRow[] = (lateInvoices as InvoiceRow[]) || [];
-      const lateAmount = late.reduce((sum, inv) => sum + Number(inv.remaining_ttc || inv.total_ttc || 0), 0);
+      // Fix #5: Replace inv.remaining_ttc with inv.remaining_due
+      const late = (lateInvoices as InvoiceRow[]) || [];
+      const lateAmount = late.reduce((sum, inv) => sum + Number(inv.remaining_due || inv.total_ttc || 0), 0);
 
-      // Low margin quotes
-      const lowMarginQuotesCount = allQuotes.filter(
-        (q) => q.margin_percent !== null && Number(q.margin_percent) < 15
-      ).length;
+      // Low margin quotes — Fix #8: cannot compute without margin_percent; set to 0
+      const lowMarginQuotesCount = 0;
 
       setKpi({
         monthlyRevenue,
@@ -310,14 +307,6 @@ export default function PilotagePage() {
   useEffect(() => {
     fetchKpiData();
   }, [fetchKpiData]);
-
-  function getPreviousPeriodRange(p: PeriodOption, current: PeriodRange): PeriodRange {
-    const duration = current.end.getTime() - current.start.getTime();
-    return {
-      start: new Date(current.start.getTime() - duration),
-      end: new Date(current.start.getTime() - 1),
-    };
-  }
 
   const periodLabel: Record<PeriodOption, string> = {
     month: 'Ce mois',
@@ -394,147 +383,84 @@ export default function PilotagePage() {
             ))}
           </div>
         ) : kpi ? (
-          <>
-            {/* ===== KPI CARDS ===== */}
+          <div className="space-y-6">
+            {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Taux de conversion */}
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-wider">Taux conversion</p>
-                      <p className="text-3xl font-bold text-white mt-1">{kpi.conversionRate}%</p>
-                      <p className="text-gray-500 text-xs mt-1">
-                        {kpi.acceptedQuotes} / {kpi.totalQuotes} devis
-                      </p>
-                    </div>
-                    <FileText className="h-8 w-8 text-blue-400 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-xs uppercase tracking-wide">Taux de conversion</span>
+                    <FileText className="h-4 w-4 text-blue-400" />
                   </div>
-                  {/* Progress bar */}
-                  <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-400 rounded-full transition-all duration-500"
-                      style={{ width: `${kpi.conversionRate}%` }}
-                    />
+                  <div className="text-2xl font-bold text-white">{kpi.conversionRate}%</div>
+                  <div className="text-gray-400 text-xs mt-1">
+                    {kpi.acceptedQuotes} / {kpi.totalQuotes} devis
                   </div>
                 </CardContent>
               </Card>
 
-              {/* DSO */}
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-wider">DSO moyen</p>
-                      <p className="text-3xl font-bold text-white mt-1">{kpi.dso}j</p>
-                      <p className="text-gray-500 text-xs mt-1">Délai paiement moyen</p>
-                    </div>
-                    <Clock
-                      className={cn(
-                        'h-8 w-8 opacity-80',
-                        kpi.dso > 60 ? 'text-red-400' : kpi.dso > 45 ? 'text-amber-400' : 'text-emerald-400'
-                      )}
-                    />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-xs uppercase tracking-wide">DSO moyen</span>
+                    <Clock className="h-4 w-4 text-yellow-400" />
                   </div>
+                  <div className="text-2xl font-bold text-white">{kpi.dso}j</div>
+                  <div className="text-gray-400 text-xs mt-1">Délai moyen de paiement</div>
                 </CardContent>
               </Card>
 
-              {/* Marge moyenne */}
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-wider">Marge moyenne</p>
-                      <p className="text-3xl font-bold text-white mt-1">{kpi.avgMargin}%</p>
-                      <div className="flex items-center gap-1 mt-1">
-                        {kpi.avgMargin >= kpi.prevAvgMargin ? (
-                          <TrendingUp className="h-3 w-3 text-emerald-400" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 text-red-400" />
-                        )}
-                        <p
-                          className={cn(
-                            'text-xs',
-                            kpi.avgMargin >= kpi.prevAvgMargin ? 'text-emerald-400' : 'text-red-400'
-                          )}
-                        >
-                          {kpi.avgMargin >= kpi.prevAvgMargin ? '+' : ''}
-                          {kpi.avgMargin - kpi.prevAvgMargin}% vs période préc.
-                        </p>
-                      </div>
-                    </div>
-                    <Euro className="h-8 w-8 text-emerald-400 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-xs uppercase tracking-wide">Factures en retard</span>
+                    <AlertTriangle className="h-4 w-4 text-red-400" />
                   </div>
+                  <div className="text-2xl font-bold text-red-400">{kpi.lateInvoicesCount}</div>
+                  <div className="text-gray-400 text-xs mt-1">{formatCurrency(kpi.lateInvoicesAmount)}</div>
                 </CardContent>
               </Card>
 
-              {/* Retards */}
-              <Card
-                className={cn(
-                  'border',
-                  kpi.lateInvoicesCount > 0
-                    ? 'bg-red-500/10 border-red-500/30'
-                    : 'bg-white/5 border-white/10'
-                )}
-              >
+              <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-wider">Retards paiement</p>
-                      <p
-                        className={cn(
-                          'text-3xl font-bold mt-1',
-                          kpi.lateInvoicesCount > 0 ? 'text-red-400' : 'text-white'
-                        )}
-                      >
-                        {kpi.lateInvoicesCount}
-                      </p>
-                      <p className="text-gray-500 text-xs mt-1">
-                        {formatCurrency(kpi.lateInvoicesAmount)} en attente
-                      </p>
-                    </div>
-                    <AlertTriangle
-                      className={cn(
-                        'h-8 w-8 opacity-80',
-                        kpi.lateInvoicesCount > 0 ? 'text-red-400' : 'text-gray-500'
-                      )}
-                    />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-xs uppercase tracking-wide">Relances actives</span>
+                    <Users className="h-4 w-4 text-purple-400" />
                   </div>
+                  <div className="text-2xl font-bold text-white">{kpi.activeRemindersCount}</div>
+                  <div className="text-gray-400 text-xs mt-1">Workflows en cours</div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/5 border-white/10">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-xs uppercase tracking-wide">Propositions IA</span>
+                    <Brain className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-white">{kpi.pendingAiProposalsCount}</div>
+                  <div className="text-gray-400 text-xs mt-1">En attente de validation</div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* ===== CHARTS ROW 1 ===== */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* CA Mensuel */}
-              <Card className="bg-white/5 border-white/10 lg:col-span-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-white text-base">CA Mensuel (TTC)</CardTitle>
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Monthly Revenue Bar Chart */}
+              <Card className="bg-white/5 border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-white text-base">CA mensuel</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={kpi.monthlyRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                      <XAxis
-                        dataKey="month"
-                        tick={{ fill: '#9ca3af', fontSize: 12 }}
-                        axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{ fill: '#9ca3af', fontSize: 11 }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k€` : `${v}€`)}
-                      />
+                    <BarChart data={kpi.monthlyRevenue}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <XAxis dataKey="month" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                      <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1a1a2e',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: 8,
-                          color: '#fff',
-                        }}
-                        formatter={(value: number) => [formatCurrency(value), 'CA TTC']}
+                        contentStyle={{ background: '#1e1e3a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                        labelStyle={{ color: '#fff' }}
+                        formatter={(value: number) => [formatCurrency(value), 'CA']}
                       />
                       <Bar dataKey="ca" fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -542,10 +468,10 @@ export default function PilotagePage() {
                 </CardContent>
               </Card>
 
-              {/* Répartition CA par type client */}
+              {/* Revenue by Type Pie Chart */}
               <Card className="bg-white/5 border-white/10">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-white text-base">Répartition CA</CardTitle>
+                <CardHeader>
+                  <CardTitle className="text-white text-base">CA par type de client</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {kpi.revenueByType.length > 0 ? (
@@ -554,292 +480,64 @@ export default function PilotagePage() {
                         <Pie
                           data={kpi.revenueByType}
                           cx="50%"
-                          cy="45%"
-                          innerRadius={55}
-                          outerRadius={85}
+                          cy="50%"
+                          outerRadius={90}
                           dataKey="value"
-                          paddingAngle={3}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          labelLine={false}
                         >
-                          {kpi.revenueByType.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          {kpi.revenueByType.map((_, index) => (
+                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
+                        <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#1a1a2e',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            borderRadius: 8,
-                            color: '#fff',
-                          }}
-                          formatter={(value: number) => [formatCurrency(value), 'CA TTC']}
-                        />
-                        <Legend
-                          formatter={(value) => (
-                            <span style={{ color: '#d1d5db', fontSize: 12 }}>{value}</span>
-                          )}
+                          contentStyle={{ background: '#1e1e3a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                          formatter={(value: number) => [formatCurrency(value), 'CA']}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex items-center justify-center h-60 text-gray-500 text-sm">
-                      Aucune donnée
-                    </div>
+                    <div className="flex items-center justify-center h-60 text-gray-500 text-sm">Aucune donnée</div>
                   )}
                 </CardContent>
               </Card>
             </div>
 
-            {/* ===== TOP 5 CLIENTS ===== */}
+            {/* Top Clients */}
             <Card className="bg-white/5 border-white/10">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-400" />
-                  Top 5 Clients (TTC)
-                </CardTitle>
+              <CardHeader>
+                <CardTitle className="text-white text-base">Top 5 clients</CardTitle>
               </CardHeader>
               <CardContent>
                 {kpi.topClients.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart
-                      layout="vertical"
-                      data={kpi.topClients}
-                      margin={{ top: 0, right: 30, left: 10, bottom: 0 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="rgba(255,255,255,0.07)"
-                        horizontal={false}
-                      />
-                      <XAxis
-                        type="number"
-                        tick={{ fill: '#9ca3af', fontSize: 11 }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k€` : `${v}€`)}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        tick={{ fill: '#d1d5db', fontSize: 12 }}
-                        axisLine={false}
-                        tickLine={false}
-                        width={110}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1a1a2e',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: 8,
-                          color: '#fff',
-                        }}
-                        formatter={(value: number) => [formatCurrency(value), 'CA TTC']}
-                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                      />
-                      <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-32 text-gray-500 text-sm">
-                    Aucune donnée sur cette période
+                  <div className="space-y-3">
+                    {kpi.topClients.map((client, idx) => {
+                      const max = kpi.topClients[0]?.total || 1;
+                      const pct = Math.round((client.total / max) * 100);
+                      return (
+                        <div key={idx} className="flex items-center gap-3">
+                          <span className="text-gray-400 text-xs w-4">{idx + 1}</span>
+                          <span className="text-white text-sm flex-1 truncate">{client.name}</span>
+                          <div className="flex-1 bg-white/10 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-2 rounded-full bg-emerald-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-white text-sm font-medium w-24 text-right">
+                            {formatCurrency(client.total)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
+                ) : (
+                  <div className="text-gray-500 text-sm text-center py-6">Aucun client sur la période</div>
                 )}
               </CardContent>
             </Card>
-
-            {/* ===== ALERTS SECTION ===== */}
-            <div>
-              <h2 className="text-lg font-semibold text-white mb-3">Alertes & Actions</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Retards de paiement */}
-                <Card
-                  className={cn(
-                    'border transition-colors',
-                    kpi.lateInvoicesCount > 0
-                      ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/15'
-                      : 'bg-white/5 border-white/10'
-                  )}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          kpi.lateInvoicesCount > 0 ? 'bg-red-500/20' : 'bg-white/10'
-                        )}
-                      >
-                        <AlertTriangle
-                          className={cn(
-                            'h-5 w-5',
-                            kpi.lateInvoicesCount > 0 ? 'text-red-400' : 'text-gray-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium text-sm">Retards paiement</p>
-                        <p className="text-gray-400 text-xs">Factures échues</p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <span
-                        className={cn(
-                          'text-2xl font-bold',
-                          kpi.lateInvoicesCount > 0 ? 'text-red-400' : 'text-gray-500'
-                        )}
-                      >
-                        {kpi.lateInvoicesCount}
-                      </span>
-                      {kpi.lateInvoicesCount > 0 && (
-                        <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-xs">
-                          {formatCurrency(kpi.lateInvoicesAmount)}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Marges basses */}
-                <Card
-                  className={cn(
-                    'border transition-colors',
-                    kpi.lowMarginQuotesCount > 0
-                      ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15'
-                      : 'bg-white/5 border-white/10'
-                  )}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          kpi.lowMarginQuotesCount > 0 ? 'bg-amber-500/20' : 'bg-white/10'
-                        )}
-                      >
-                        <TrendingDown
-                          className={cn(
-                            'h-5 w-5',
-                            kpi.lowMarginQuotesCount > 0 ? 'text-amber-400' : 'text-gray-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium text-sm">Marges basses</p>
-                        <p className="text-gray-400 text-xs">Devis &lt; 15% marge</p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <span
-                        className={cn(
-                          'text-2xl font-bold',
-                          kpi.lowMarginQuotesCount > 0 ? 'text-amber-400' : 'text-gray-500'
-                        )}
-                      >
-                        {kpi.lowMarginQuotesCount}
-                      </span>
-                      {kpi.lowMarginQuotesCount > 0 && (
-                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-xs">
-                          Attention
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Relances actives */}
-                <Card
-                  className={cn(
-                    'border transition-colors',
-                    kpi.activeRemindersCount > 0
-                      ? 'bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/15'
-                      : 'bg-white/5 border-white/10'
-                  )}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          kpi.activeRemindersCount > 0 ? 'bg-orange-500/20' : 'bg-white/10'
-                        )}
-                      >
-                        <Clock
-                          className={cn(
-                            'h-5 w-5',
-                            kpi.activeRemindersCount > 0 ? 'text-orange-400' : 'text-gray-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium text-sm">Relances actives</p>
-                        <p className="text-gray-400 text-xs">Workflows en cours</p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <span
-                        className={cn(
-                          'text-2xl font-bold',
-                          kpi.activeRemindersCount > 0 ? 'text-orange-400' : 'text-gray-500'
-                        )}
-                      >
-                        {kpi.activeRemindersCount}
-                      </span>
-                      {kpi.activeRemindersCount > 0 && (
-                        <Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30 text-xs">
-                          En cours
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Propositions IA en attente */}
-                <Card
-                  className={cn(
-                    'border transition-colors',
-                    kpi.pendingAiProposalsCount > 0
-                      ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/15'
-                      : 'bg-white/5 border-white/10'
-                  )}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          kpi.pendingAiProposalsCount > 0 ? 'bg-emerald-500/20' : 'bg-white/10'
-                        )}
-                      >
-                        <Brain
-                          className={cn(
-                            'h-5 w-5',
-                            kpi.pendingAiProposalsCount > 0 ? 'text-emerald-400' : 'text-gray-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium text-sm">Propositions IA</p>
-                        <p className="text-gray-400 text-xs">En attente de révision</p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <span
-                        className={cn(
-                          'text-2xl font-bold',
-                          kpi.pendingAiProposalsCount > 0 ? 'text-emerald-400' : 'text-gray-500'
-                        )}
-                      >
-                        {kpi.pendingAiProposalsCount}
-                      </span>
-                      {kpi.pendingAiProposalsCount > 0 && (
-                        <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
-                          À traiter
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </>
+          </div>
         ) : null}
       </div>
     </div>

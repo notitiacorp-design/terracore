@@ -75,7 +75,7 @@ export function useCatalogue(): UseCatalogueReturn {
           .from('item')
           .select('*, item_family(*)')
           .eq('company_id', companyId)
-          .order('name', { ascending: true });
+          .order('label', { ascending: true });
 
         if (filters?.family_id) {
           query = query.eq('family_id', filters.family_id);
@@ -88,7 +88,7 @@ export function useCatalogue(): UseCatalogueReturn {
         }
         if (filters?.search && filters.search.trim() !== '') {
           const searchTerm = `%${filters.search.trim()}%`;
-          query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`);
+          query = query.or(`label.ilike.${searchTerm},description.ilike.${searchTerm}`);
         }
 
         const { data, error: supabaseError } = await query;
@@ -145,14 +145,14 @@ export function useCatalogue(): UseCatalogueReturn {
           .from('work_unit')
           .select('*')
           .eq('company_id', companyId)
-          .order('name', { ascending: true });
+          .order('label', { ascending: true });
 
         if (filters?.is_active !== undefined) {
           query = query.eq('is_active', filters.is_active);
         }
         if (filters?.search && filters.search.trim() !== '') {
           const searchTerm = `%${filters.search.trim()}%`;
-          query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`);
+          query = query.or(`label.ilike.${searchTerm},description.ilike.${searchTerm}`);
         }
 
         const { data, error: supabaseError } = await query;
@@ -189,7 +189,7 @@ export function useCatalogue(): UseCatalogueReturn {
       }
 
       if (created) {
-        setItems((prev) => [...prev, created as ItemWithFamily].sort((a, b) => a.name.localeCompare(b.name, 'fr')));
+        setItems((prev) => [...prev, created as ItemWithFamily].sort((a, b) => a.label.localeCompare(b.label, 'fr')));
       }
 
       return created as ItemRow;
@@ -224,7 +224,7 @@ export function useCatalogue(): UseCatalogueReturn {
           setItems((prev) =>
             prev
               .map((item) => (item.id === id ? (updated as ItemWithFamily) : item))
-              .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+              .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
           );
         }
 
@@ -259,7 +259,7 @@ export function useCatalogue(): UseCatalogueReturn {
 
         if (created) {
           setWorkUnits((prev) =>
-            [...prev, created as WorkUnitRow].sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+            [...prev, created as WorkUnitRow].sort((a, b) => a.label.localeCompare(b.label, 'fr'))
           );
         }
 
@@ -297,7 +297,7 @@ export function useCatalogue(): UseCatalogueReturn {
           setWorkUnits((prev) =>
             prev
               .map((wu) => (wu.id === id ? (updated as WorkUnitRow) : wu))
-              .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+              .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
           );
         }
 
@@ -324,7 +324,7 @@ export function useCatalogue(): UseCatalogueReturn {
           .from('work_unit_line')
           .select('*, item(*)')
           .eq('work_unit_id', workUnitId)
-          .order('created_at', { ascending: true });
+          .order('sort_order', { ascending: true });
 
         if (supabaseError) {
           throw new Error(supabaseError.message);
@@ -362,8 +362,8 @@ export function useCatalogue(): UseCatalogueReturn {
           .select('*, item_family(*)')
           .eq('company_id', companyId)
           .eq('is_active', true)
-          .or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`)
-          .order('name', { ascending: true })
+          .or(`label.ilike.${searchTerm},description.ilike.${searchTerm}`)
+          .order('label', { ascending: true })
           .limit(50);
 
         if (supabaseError) {

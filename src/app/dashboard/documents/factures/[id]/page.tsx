@@ -42,7 +42,6 @@ import {
   ArrowLeft,
   Send,
   CheckCircle,
-  Link as LinkIcon,
   FileText,
   Bell,
   BellOff,
@@ -69,11 +68,11 @@ interface InvoiceWithDetails extends InvoiceRow {
 
 const statusConfig: Record<InvoiceStatus, { label: string; className: string }> = {
   brouillon: { label: 'Brouillon', className: 'bg-gray-100 text-gray-700 border-gray-200' },
-  envoyee: { label: 'Envoyée', className: 'bg-blue-100 text-blue-700 border-blue-200' },
-  payee: { label: 'Payée', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  partiellement_payee: { label: 'Part. payée', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  envoyee: { label: 'Envoy\u00e9e', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  payee: { label: 'Pay\u00e9e', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  partiellement_payee: { label: 'Part. pay\u00e9e', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
   en_retard: { label: 'En retard', className: 'bg-red-100 text-red-700 border-red-200' },
-  annulee: { label: 'Annulée', className: 'bg-gray-100 text-gray-500 border-gray-200' },
+  annulee: { label: 'Annul\u00e9e', className: 'bg-gray-100 text-gray-500 border-gray-200' },
 };
 
 const reminderLevelConfig: Record<ReminderLevel, { label: string; color: string }> = {
@@ -86,10 +85,10 @@ const reminderLevelConfig: Record<ReminderLevel, { label: string; color: string 
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   virement: 'Virement',
-  cheque: 'Chèque',
+  cheque: 'Ch\u00e8que',
   cb: 'Carte bancaire',
-  especes: 'Espèces',
-  prelevement: 'Prélèvement',
+  especes: 'Esp\u00e8ces',
+  prelevement: 'Pr\u00e9l\u00e8vement',
 };
 
 export default function FactureDetailPage() {
@@ -134,11 +133,12 @@ export default function FactureDetailPage() {
 
       let workflowWithMessages = null;
       if (workflowRes.data) {
+        // FIX 4: Use 'reminder_workflow_id' instead of 'workflow_id'
         const { data: messages } = await supabase
           .from('reminder_message')
           .select('*')
-          .eq('workflow_id', workflowRes.data.id)
-          .order('created_at');
+          .eq('reminder_workflow_id', workflowRes.data.id)
+          .order('sent_at');
         workflowWithMessages = { ...workflowRes.data, messages: messages || [] };
       }
 
@@ -170,7 +170,7 @@ export default function FactureDetailPage() {
         .update({ status: 'envoyee' })
         .eq('id', invoice.id);
       if (error) throw error;
-      toast({ title: 'Facture envoyée', description: 'Le statut a été mis à jour.' });
+      toast({ title: 'Facture envoy\u00e9e', description: 'Le statut a \u00e9t\u00e9 mis \u00e0 jour.' });
       await fetchInvoice();
     } catch {
       toast({ title: 'Erreur', description: "Impossible d'envoyer la facture.", variant: 'destructive' });
@@ -183,15 +183,16 @@ export default function FactureDetailPage() {
     if (!invoice) return;
     setActionLoading('pay');
     try {
+      // FIX 1: Use 'remaining_due' instead of 'remaining_ttc'
       const { error } = await supabase
         .from('invoice')
-        .update({ status: 'payee', remaining_ttc: 0 })
+        .update({ status: 'payee', remaining_due: 0 })
         .eq('id', invoice.id);
       if (error) throw error;
-      toast({ title: 'Facture marquée payée', description: 'Le statut a été mis à jour.' });
+      toast({ title: 'Facture marqu\u00e9e pay\u00e9e', description: 'Le statut a \u00e9t\u00e9 mis \u00e0 jour.' });
       await fetchInvoice();
     } catch {
-      toast({ title: 'Erreur', description: 'Impossible de marquer la facture comme payée.', variant: 'destructive' });
+      toast({ title: 'Erreur', description: 'Impossible de marquer la facture comme pay\u00e9e.', variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -201,15 +202,16 @@ export default function FactureDetailPage() {
     if (!invoice?.workflow) return;
     setActionLoading('workflow');
     try {
+      // FIX 2: Use 'stop_reason' instead of 'stopped_reason'
       const { error } = await supabase
         .from('reminder_workflow')
-        .update({ is_active: false, stopped_at: new Date().toISOString(), stopped_reason: 'Arrêt manuel' })
+        .update({ is_active: false, stopped_at: new Date().toISOString(), stop_reason: 'Arr\u00eat manuel' })
         .eq('id', invoice.workflow.id);
       if (error) throw error;
-      toast({ title: 'Workflow arrêté', description: 'Les relances automatiques ont été désactivées.' });
+      toast({ title: 'Workflow arr\u00eat\u00e9', description: 'Les relances automatiques ont \u00e9t\u00e9 d\u00e9sactiv\u00e9es.' });
       await fetchInvoice();
     } catch {
-      toast({ title: 'Erreur', description: "Impossible d'arrêter le workflow.", variant: 'destructive' });
+      toast({ title: 'Erreur', description: "Impossible d'arr\u00eater le workflow.", variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -219,20 +221,20 @@ export default function FactureDetailPage() {
     if (!invoice) return;
     setActionLoading('workflow');
     try {
+      // FIX 3: Remove 'auto_send' and 'next_reminder_at' — not in schema
       const { error } = await supabase.from('reminder_workflow').insert({
         company_id: invoice.company_id,
         invoice_id: invoice.id,
         client_id: invoice.client_id,
         current_level: 'relance_1',
         is_active: true,
-        auto_send: true,
-        next_reminder_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        started_at: new Date().toISOString(),
       });
       if (error) throw error;
-      toast({ title: 'Workflow démarré', description: 'Les relances automatiques ont été activées.' });
+      toast({ title: 'Workflow d\u00e9marr\u00e9', description: 'Les relances automatiques ont \u00e9t\u00e9 activ\u00e9es.' });
       await fetchInvoice();
     } catch {
-      toast({ title: 'Erreur', description: 'Impossible de démarrer le workflow.', variant: 'destructive' });
+      toast({ title: 'Erreur', description: 'Impossible de d\u00e9marrer le workflow.', variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -246,7 +248,9 @@ export default function FactureDetailPage() {
 
   const totalPaid = invoice?.payments.reduce((sum, p) => sum + (p.amount || 0), 0) ?? 0;
   const paymentProgress =
-    invoice && invoice.total_ttc > 0 ? ((invoice.total_ttc - (invoice.remaining_ttc ?? 0)) / invoice.total_ttc) * 100 : 0;
+    invoice && invoice.total_ttc > 0
+      ? ((invoice.total_ttc - (invoice.remaining_due ?? 0)) / invoice.total_ttc) * 100
+      : 0;
 
   if (loading) {
     return (
@@ -263,7 +267,6 @@ export default function FactureDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#1a1a2e] text-white">
-      {/* Mobile-first container */}
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Header Navigation */}
         <div className="flex items-center gap-3">
@@ -277,7 +280,7 @@ export default function FactureDetailPage() {
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-white truncate">{invoice.reference}</h1>
-            <p className="text-sm text-gray-400">Détail de la facture</p>
+            <p className="text-sm text-gray-400">D\u00e9tail de la facture</p>
           </div>
           <Badge className={cn('border text-xs font-medium whitespace-nowrap', statusCfg.className)}>
             {statusCfg.label}
@@ -301,11 +304,7 @@ export default function FactureDetailPage() {
                 {invoice.client?.phone && (
                   <p className="text-sm text-gray-400">{invoice.client.phone}</p>
                 )}
-                {invoice.client?.address && (
-                  <p className="text-sm text-gray-400">
-                    {invoice.client.address}, {invoice.client.postal_code} {invoice.client.city}
-                  </p>
-                )}
+                {/* FIX 5: Removed address/postal_code/city — not on client table */}
               </div>
             </div>
 
@@ -315,32 +314,32 @@ export default function FactureDetailPage() {
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
                 <div>
-                  <p className="text-xs text-gray-400">Émission</p>
+                  <p className="text-xs text-gray-400">\u00c9mission</p>
                   <p className="text-sm font-medium text-white">
-                    {invoice.date_emission ? formatDate(invoice.date_emission) : '—'}
+                    {invoice.date_emission ? formatDate(invoice.date_emission) : '\u2014'}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-gray-400 shrink-0" />
                 <div>
-                  <p className="text-xs text-gray-400">Échéance</p>
+                  <p className="text-xs text-gray-400">\u00c9ch\u00e9ance</p>
                   <p
                     className={cn(
                       'text-sm font-medium',
                       status === 'en_retard' ? 'text-red-400' : 'text-white'
                     )}
                   >
-                    {invoice.date_echeance ? formatDate(invoice.date_echeance) : '—'}
+                    {invoice.date_due ? formatDate(invoice.date_due) : '\u2014'}
                   </p>
                 </div>
               </div>
             </div>
 
-            {invoice.object && (
+            {invoice.title && (
               <div>
                 <p className="text-xs text-gray-400 mb-1">Objet</p>
-                <p className="text-sm text-white">{invoice.object}</p>
+                <p className="text-sm text-white">{invoice.title}</p>
               </div>
             )}
           </CardContent>
@@ -356,129 +355,43 @@ export default function FactureDetailPage() {
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Payé</span>
-              <span className="text-emerald-400 font-medium">
-                {formatCurrency(invoice.total_ttc - (invoice.remaining_ttc ?? invoice.total_ttc))}
-              </span>
+              <span className="text-gray-400">Pay\u00e9</span>
+              <span className="text-emerald-400 font-medium">{formatCurrency(totalPaid)}</span>
             </div>
-            <Progress
-              value={paymentProgress}
-              className="h-3 bg-white/10 [&>div]:bg-emerald-500"
-            />
+            <Progress value={paymentProgress} className="h-2 bg-white/10" />
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Restant dû</span>
-              <span
-                className={cn(
-                  'font-semibold',
-                  (invoice.remaining_ttc ?? 0) > 0 ? 'text-red-400' : 'text-emerald-400'
-                )}
-              >
-                {formatCurrency(invoice.remaining_ttc ?? 0)}
-              </span>
+              <span className="text-gray-400">Restant d\u00fb</span>
+              <span className="text-white font-medium">{formatCurrency(invoice.remaining_due ?? 0)}</span>
             </div>
             <Separator className="bg-white/10" />
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Total TTC</span>
-              <span className="text-white font-bold text-base">{formatCurrency(invoice.total_ttc)}</span>
+            <div className="flex justify-between">
+              <span className="text-gray-400 text-sm">Total TTC</span>
+              <span className="text-white font-bold">{formatCurrency(invoice.total_ttc)}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-3">
-          {status === 'brouillon' && (
-            <Button
-              className="min-h-[48px] bg-blue-600 hover:bg-blue-700 text-white col-span-2"
-              onClick={handleSendInvoice}
-              disabled={actionLoading === 'send'}
-            >
-              {actionLoading === 'send' ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              Envoyer la facture
-            </Button>
-          )}
-
-          {(status === 'envoyee' || status === 'partiellement_payee' || status === 'en_retard') && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  className="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 text-white"
-                  disabled={actionLoading === 'pay'}
-                >
-                  {actionLoading === 'pay' ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                  )}
-                  Marquer payée
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="bg-[#1a1a2e] border-white/10 text-white">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmer le paiement</AlertDialogTitle>
-                  <AlertDialogDescription className="text-gray-400">
-                    Voulez-vous marquer cette facture comme entièrement payée ?
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">
-                    Annuler
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleMarkPaid}
-                    className="bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    Confirmer
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-
-          <Button
-            variant="outline"
-            className="min-h-[48px] border-white/20 text-white hover:bg-white/10"
-            onClick={() => {
-              toast({ title: 'Lien de paiement', description: 'Fonctionnalité Stripe en cours de déploiement.' });
-            }}
-          >
-            <LinkIcon className="h-4 w-4 mr-2 text-emerald-400" />
-            Lien Stripe
-          </Button>
-
-          <Button
-            variant="outline"
-            className="min-h-[48px] border-white/20 text-white hover:bg-white/10"
-            onClick={() => {
-              toast({ title: 'Export PDF', description: 'Génération du PDF en cours.' });
-            }}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            PDF
-          </Button>
-        </div>
-
         {/* Invoice Lines */}
         <Card className="bg-white/5 border-white/10">
           <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-base font-semibold text-white">Lignes de facturation</CardTitle>
+            <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+              <FileText className="h-4 w-4 text-emerald-400" />
+              Lignes de facturation
+            </CardTitle>
           </CardHeader>
-          <CardContent className="px-0 pb-0">
+          <CardContent className="px-0 pb-4">
             {invoice.lines.length === 0 ? (
-              <p className="text-gray-400 text-sm px-4 pb-4">Aucune ligne.</p>
+              <p className="text-gray-400 text-sm px-4">Aucune ligne.</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-white/10 hover:bg-transparent">
-                      <TableHead className="text-gray-400 font-medium">Désignation</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">Qté</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">PU HT</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">TVA</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">Total HT</TableHead>
+                      <TableHead className="text-gray-400">D\u00e9signation</TableHead>
+                      <TableHead className="text-gray-400 text-right">Qté</TableHead>
+                      <TableHead className="text-gray-400 text-right">PU HT</TableHead>
+                      <TableHead className="text-gray-400 text-right">TVA</TableHead>
+                      <TableHead className="text-gray-400 text-right">Total HT</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -496,7 +409,9 @@ export default function FactureDetailPage() {
                         <TableCell className="text-gray-300 text-right">
                           {formatCurrency(line.unit_price_ht)}
                         </TableCell>
-                        <TableCell className="text-gray-300 text-right">{line.tva_rate}%</TableCell>
+                        <TableCell className="text-gray-300 text-right">
+                          {line.vat_rate}%
+                        </TableCell>
                         <TableCell className="text-white font-medium text-right">
                           {formatCurrency(line.total_ht)}
                         </TableCell>
@@ -506,22 +421,24 @@ export default function FactureDetailPage() {
                 </Table>
               </div>
             )}
+          </CardContent>
+        </Card>
 
-            {/* Totals */}
-            <div className="border-t border-white/10 px-4 py-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Total HT</span>
-                <span className="text-white">{formatCurrency(invoice.total_ht)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">TVA</span>
-                <span className="text-white">{formatCurrency(invoice.total_tva)}</span>
-              </div>
-              <Separator className="bg-white/10" />
-              <div className="flex justify-between">
-                <span className="font-bold text-white">Total TTC</span>
-                <span className="font-bold text-white text-lg">{formatCurrency(invoice.total_ttc)}</span>
-              </div>
+        {/* Totals */}
+        <Card className="bg-white/5 border-white/10">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Total HT</span>
+              <span className="text-white">{formatCurrency(invoice.total_ht)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">TVA</span>
+              <span className="text-white">{formatCurrency(invoice.total_tva)}</span>
+            </div>
+            <Separator className="bg-white/10" />
+            <div className="flex justify-between">
+              <span className="text-white font-bold">Total TTC</span>
+              <span className="text-white font-bold text-lg">{formatCurrency(invoice.total_ttc)}</span>
             </div>
           </CardContent>
         </Card>
@@ -531,89 +448,37 @@ export default function FactureDetailPage() {
           <Card className="bg-white/5 border-white/10">
             <CardHeader className="pb-2 px-4 pt-4">
               <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-emerald-400" />
-                Paiements reçus
+                <Euro className="h-4 w-4 text-emerald-400" />
+                R\u00e8glements re\u00e7us
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-0 pb-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-white/10 hover:bg-transparent">
-                      <TableHead className="text-gray-400 font-medium">Date</TableHead>
-                      <TableHead className="text-gray-400 font-medium">Méthode</TableHead>
-                      <TableHead className="text-gray-400 font-medium">Référence</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">Montant</TableHead>
+            <CardContent className="px-0 pb-4">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead className="text-gray-400">Date</TableHead>
+                    <TableHead className="text-gray-400">Mode</TableHead>
+                    <TableHead className="text-gray-400">R\u00e9f\u00e9rence</TableHead>
+                    <TableHead className="text-gray-400 text-right">Montant</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoice.payments.map((payment) => (
+                    <TableRow key={payment.id} className="border-white/10 hover:bg-white/5">
+                      <TableCell className="text-gray-300">
+                        {payment.payment_date ? formatDate(payment.payment_date) : '\u2014'}
+                      </TableCell>
+                      <TableCell className="text-gray-300">
+                        {paymentMethodLabels[payment.payment_method as PaymentMethod] ?? payment.payment_method}
+                      </TableCell>
+                      <TableCell className="text-gray-300">{payment.reference || '\u2014'}</TableCell>
+                      <TableCell className="text-emerald-400 font-medium text-right">
+                        {formatCurrency(payment.amount)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoice.payments.map((payment) => (
-                      <TableRow key={payment.id} className="border-white/10 hover:bg-white/5">
-                        <TableCell className="text-gray-300">
-                          {payment.payment_date ? formatDate(payment.payment_date) : '—'}
-                        </TableCell>
-                        <TableCell className="text-gray-300">
-                          {paymentMethodLabels[payment.payment_method as PaymentMethod] || payment.payment_method}
-                        </TableCell>
-                        <TableCell className="text-gray-300">{payment.reference || '—'}</TableCell>
-                        <TableCell className="text-emerald-400 font-medium text-right">
-                          {formatCurrency(payment.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="flex justify-between px-4 py-3 border-t border-white/10">
-                <span className="font-semibold text-white">Total encaissé</span>
-                <span className="font-bold text-emerald-400">{formatCurrency(totalPaid)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Deposits */}
-        {invoice.deposits.length > 0 && (
-          <Card className="bg-white/5 border-white/10">
-            <CardHeader className="pb-2 px-4 pt-4">
-              <CardTitle className="text-base font-semibold text-white">Acomptes liés</CardTitle>
-            </CardHeader>
-            <CardContent className="px-0 pb-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-white/10 hover:bg-transparent">
-                      <TableHead className="text-gray-400 font-medium">Référence</TableHead>
-                      <TableHead className="text-gray-400 font-medium">Date</TableHead>
-                      <TableHead className="text-gray-400 font-medium">Statut</TableHead>
-                      <TableHead className="text-gray-400 font-medium text-right">Montant TTC</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoice.deposits.map((deposit) => (
-                      <TableRow key={deposit.id} className="border-white/10 hover:bg-white/5">
-                        <TableCell className="text-white font-medium">{deposit.reference}</TableCell>
-                        <TableCell className="text-gray-300">
-                          {deposit.date_emission ? formatDate(deposit.date_emission) : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={cn(
-                              'text-xs border',
-                              statusConfig[deposit.status as InvoiceStatus]?.className ?? 'bg-gray-100 text-gray-700'
-                            )}
-                          >
-                            {statusConfig[deposit.status as InvoiceStatus]?.label ?? deposit.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-white font-medium text-right">
-                          {formatCurrency(deposit.amount_ttc)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}
@@ -621,181 +486,229 @@ export default function FactureDetailPage() {
         {/* Reminder Workflow */}
         <Card className="bg-white/5 border-white/10">
           <CardHeader className="pb-2 px-4 pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
-                <Bell className="h-4 w-4 text-emerald-400" />
-                Workflow de relance
-              </CardTitle>
-              {invoice.workflow ? (
+            <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+              <Bell className="h-4 w-4 text-emerald-400" />
+              Workflow de relance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            {invoice.workflow ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white font-medium">
+                      Niveau actuel :{' '}
+                      <span
+                        className={cn(
+                          reminderLevelConfig[
+                            invoice.workflow.current_level as ReminderLevel
+                          ]?.color ?? 'text-white'
+                        )}
+                      >
+                        {reminderLevelConfig[
+                          invoice.workflow.current_level as ReminderLevel
+                        ]?.label ?? invoice.workflow.current_level}
+                      </span>
+                    </p>
+                    {invoice.workflow.last_action_at && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Derni\u00e8re action : {formatDate(invoice.workflow.last_action_at)}
+                      </p>
+                    )}
+                  </div>
+                  <Badge className="bg-emerald-900/40 text-emerald-400 border-emerald-700 text-xs">
+                    Actif
+                  </Badge>
+                </div>
+
+                {invoice.workflow.messages.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-400 font-medium">Messages envoy\u00e9s</p>
+                    {invoice.workflow.messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className="bg-white/5 rounded-lg p-3 text-sm"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-gray-300 font-medium">{msg.subject}</span>
+                          <span className="text-xs text-gray-500">
+                            {msg.sent_at ? formatDate(msg.sent_at) : '\u2014'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400">
+                          Canal : {msg.channel} | Niveau : {msg.level}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="min-h-[40px] border-red-500/30 text-red-400 hover:bg-red-500/10"
+                      className="w-full border-red-700 text-red-400 hover:bg-red-900/20 min-h-[48px]"
                       disabled={actionLoading === 'workflow'}
                     >
                       {actionLoading === 'workflow' ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : (
-                        <BellOff className="h-4 w-4 mr-1" />
+                        <BellOff className="h-4 w-4 mr-2" />
                       )}
-                      Arrêter
+                      Arr\u00eater le workflow
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="bg-[#1a1a2e] border-white/10 text-white">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Arrêter les relances</AlertDialogTitle>
+                      <AlertDialogTitle>Arr\u00eater le workflow de relance ?</AlertDialogTitle>
                       <AlertDialogDescription className="text-gray-400">
-                        Voulez-vous désactiver le workflow de relance automatique pour cette facture ?
+                        Les relances automatiques seront d\u00e9sactiv\u00e9es pour cette facture.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">
+                      <AlertDialogCancel className="border-white/10 text-white hover:bg-white/10">
                         Annuler
                       </AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={handleStopWorkflow}
                         className="bg-red-600 hover:bg-red-700"
+                        onClick={handleStopWorkflow}
                       >
-                        Arrêter
+                        Arr\u00eater
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              ) : (
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-400">
+                  Aucun workflow actif. Activez les relances automatiques pour cette facture.
+                </p>
                 <Button
-                  size="sm"
-                  className="min-h-[40px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 min-h-[48px]"
                   onClick={handleStartWorkflow}
-                  disabled={
-                    actionLoading === 'workflow' ||
-                    status === 'payee' ||
-                    status === 'annulee' ||
-                    status === 'brouillon'
-                  }
+                  disabled={actionLoading === 'workflow' || status === 'payee' || status === 'annulee'}
                 >
                   {actionLoading === 'workflow' ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : (
-                    <Bell className="h-4 w-4 mr-1" />
+                    <Bell className="h-4 w-4 mr-2" />
                   )}
-                  Démarrer
+                  D\u00e9marrer le workflow
                 </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {invoice.workflow ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
-                  <div
-                    className={cn(
-                      'flex items-center gap-2 font-medium',
-                      reminderLevelConfig[invoice.workflow.current_level as ReminderLevel]?.color ?? 'text-white'
-                    )}
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                    {reminderLevelConfig[invoice.workflow.current_level as ReminderLevel]?.label ?? invoice.workflow.current_level}
-                  </div>
-                  <Separator orientation="vertical" className="h-4 bg-white/20" />
-                  <div className="text-sm text-gray-400">
-                    Prochaine relance :{' '}
-                    <span className="text-white">
-                      {invoice.workflow.next_reminder_at
-                        ? formatDate(invoice.workflow.next_reminder_at)
-                        : '—'}
-                    </span>
-                  </div>
-                  <div className="ml-auto">
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-                      Actif
-                    </Badge>
-                  </div>
-                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
-                {/* Messages Timeline */}
-                {invoice.workflow.messages.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-400 mb-3">Historique des envois</p>
-                    <div className="space-y-3">
-                      {invoice.workflow.messages.map((msg, index) => (
-                        <div key={msg.id} className="flex gap-3">
-                          <div className="flex flex-col items-center">
-                            <div
-                              className={cn(
-                                'h-2.5 w-2.5 rounded-full mt-1 shrink-0',
-                                msg.status === 'sent' ? 'bg-emerald-400' : 'bg-red-400'
-                              )}
-                            />
-                            {index < invoice.workflow!.messages.length - 1 && (
-                              <div className="w-px flex-1 bg-white/10 mt-1" />
-                            )}
-                          </div>
-                          <div className="pb-3 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span
-                                className={cn(
-                                  'text-sm font-medium',
-                                  reminderLevelConfig[msg.level as ReminderLevel]?.color ?? 'text-white'
-                                )}
-                              >
-                                {reminderLevelConfig[msg.level as ReminderLevel]?.label ?? msg.level}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                via {msg.channel === 'email' ? 'Email' : msg.channel}
-                              </span>
-                              {msg.sent_at && (
-                                <span className="text-xs text-gray-500">
-                                  {formatDate(msg.sent_at)}
-                                </span>
-                              )}
-                              <Badge
-                                className={cn(
-                                  'text-xs border ml-auto',
-                                  msg.status === 'sent'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                )}
-                              >
-                                {msg.status === 'sent' ? 'Envoyé' : 'Échec'}
-                              </Badge>
-                            </div>
-                            {msg.subject && (
-                              <p className="text-xs text-gray-400 mt-0.5 truncate">{msg.subject}</p>
-                            )}
-                            {msg.error_message && (
-                              <p className="text-xs text-red-400 mt-0.5">{msg.error_message}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <BellOff className="h-8 w-8 text-gray-500 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Aucun workflow de relance actif.</p>
-                {(status === 'envoyee' || status === 'partiellement_payee' || status === 'en_retard') && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Démarrez le workflow pour envoyer des relances automatiques.
-                  </p>
-                )}
+        {/* Actions */}
+        <Card className="bg-white/5 border-white/10">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-base font-semibold text-white">Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            {status === 'brouillon' && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    className="w-full bg-blue-600 hover:bg-blue-700 min-h-[48px]"
+                    disabled={actionLoading === 'send'}
+                  >
+                    {actionLoading === 'send' ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Marquer comme envoy\u00e9e
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#1a1a2e] border-white/10 text-white">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Envoyer la facture ?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-gray-400">
+                      Le statut passera \u00e0 &ldquo;Envoy\u00e9e&rdquo;.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-white/10 text-white hover:bg-white/10">
+                      Annuler
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={handleSendInvoice}
+                    >
+                      Confirmer
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+
+            {(status === 'envoyee' || status === 'partiellement_payee' || status === 'en_retard') && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 min-h-[48px]"
+                    disabled={actionLoading === 'pay'}
+                  >
+                    {actionLoading === 'pay' ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Marquer comme pay\u00e9e
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#1a1a2e] border-white/10 text-white">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Marquer comme pay\u00e9e ?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-gray-400">
+                      Le solde restant sera r\u00e9initialis\u00e9 \u00e0 z\u00e9ro.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-white/10 text-white hover:bg-white/10">
+                      Annuler
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={handleMarkPaid}
+                    >
+                      Confirmer
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+
+            {status === 'en_retard' && (
+              <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-700/40 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                <p className="text-sm text-red-300">Cette facture est en retard de paiement.</p>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Notes */}
-        {invoice.notes && (
+        {(invoice.notes_public || invoice.notes_internal) && (
           <Card className="bg-white/5 border-white/10">
             <CardHeader className="pb-2 px-4 pt-4">
-              <CardTitle className="text-base font-semibold text-white">Notes internes</CardTitle>
+              <CardTitle className="text-base font-semibold text-white">Notes</CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">{invoice.notes}</p>
+            <CardContent className="px-4 pb-4 space-y-3">
+              {invoice.notes_public && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Notes publiques</p>
+                  <p className="text-sm text-white whitespace-pre-wrap">{invoice.notes_public}</p>
+                </div>
+              )}
+              {invoice.notes_internal && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Notes internes</p>
+                  <p className="text-sm text-white whitespace-pre-wrap">{invoice.notes_internal}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

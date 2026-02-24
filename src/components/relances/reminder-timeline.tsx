@@ -285,8 +285,8 @@ export function ReminderTimeline({ messages, currentLevel }: ReminderTimelinePro
                       {levelMessages
                         .sort(
                           (a, b) =>
-                            new Date(a.created_at).getTime() -
-                            new Date(b.created_at).getTime()
+                            (a.sent_at ? new Date(a.sent_at).getTime() : 0) -
+                            (b.sent_at ? new Date(b.sent_at).getTime() : 0)
                         )
                         .map((msg) => (
                           <div
@@ -302,60 +302,53 @@ export function ReminderTimeline({ messages, currentLevel }: ReminderTimelinePro
                           >
                             {/* Message header */}
                             <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={cn(
-                                    'flex items-center gap-1 text-xs font-medium',
-                                    isCurrent ? config.textColor : 'text-gray-500'
-                                  )}
-                                >
-                                  {getChannelIcon(msg.channel)}
-                                  {getChannelLabel(msg.channel)}
-                                </span>
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                                {getChannelIcon(msg.channel ?? '')}
+                                <span>{getChannelLabel(msg.channel ?? '')}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {msg.sent_at ? (
+                                  <StatusBadge status="sent" />
+                                ) : (
+                                  <StatusBadge status="pending" />
+                                )}
                                 {msg.sent_at && (
                                   <span className="text-xs text-gray-400">
-                                    · {formatDate(msg.sent_at)}
+                                    {formatDate(msg.sent_at)}
                                   </span>
                                 )}
                               </div>
-                              <StatusBadge status={msg.status ?? 'en_attente'} />
                             </div>
-
-                            {/* Subject */}
                             {msg.subject && (
-                              <p
-                                className={cn(
-                                  'text-sm font-medium truncate',
-                                  isCurrent ? config.textColor : 'text-gray-700'
-                                )}
-                              >
+                              <p className="text-xs font-medium text-gray-700 mt-1 truncate">
                                 {msg.subject}
                               </p>
                             )}
-
-                            {/* Error message */}
-                            {msg.error_message && (
-                              <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
-                                <XCircle className="h-3 w-3 flex-shrink-0" />
-                                <span className="truncate">{msg.error_message}</span>
-                              </p>
+                            {(msg.opened_at || msg.clicked_at) && (
+                              <div className="flex items-center gap-3 mt-1.5">
+                                {msg.opened_at && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Ouvert
+                                  </span>
+                                )}
+                                {msg.clicked_at && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Cliqué
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         ))}
                     </div>
                   ) : (
-                    <div
-                      className={cn(
-                        'rounded-lg border p-3 text-sm',
-                        isFuture
-                          ? 'border-dashed border-gray-200 text-gray-400 bg-white'
-                          : 'border-gray-200 text-gray-400 bg-gray-50'
-                      )}
-                    >
-                      {isFuture
-                        ? 'Pas encore atteint'
-                        : 'Aucun message enregistré'}
-                    </div>
+                    !isFuture && (
+                      <p className="text-xs text-gray-400 italic">
+                        Aucun message envoyé à ce niveau.
+                      </p>
+                    )
                   )}
                 </div>
               </div>

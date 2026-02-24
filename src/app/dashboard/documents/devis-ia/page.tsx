@@ -37,7 +37,7 @@ interface SuggestedItem {
   unit: string;
   quantity: number;
   unit_price_ht: number;
-  tva_rate: number;
+  vat_rate: number;
   total_ht: number;
 }
 
@@ -69,8 +69,8 @@ const KEYWORD_RULES: {
     defaultQty: 100,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre tonte', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 35, tva_rate: 10, total_ht: 0 },
-      { name: 'Passage tondeuse', item_type: 'fourniture', unit: 'm²', unit_price_ht: 0.08, tva_rate: 10, total_ht: 0 },
+      { name: 'Main d\'œuvre tonte', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 35, vat_rate: 10, total_ht: 0 },
+      { name: 'Passage tondeuse', item_type: 'fourniture', unit: 'm²', unit_price_ht: 0.08, vat_rate: 10, total_ht: 0 },
     ],
   },
   {
@@ -81,8 +81,8 @@ const KEYWORD_RULES: {
     defaultQty: 20,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre taille haie', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 38, tva_rate: 10, total_ht: 0 },
-      { name: 'Matériel de taille', item_type: 'location', unit: 'j', unit_price_ht: 45, tva_rate: 20, total_ht: 0 },
+      { name: 'Main d\'œuvre taille haie', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 38, vat_rate: 10, total_ht: 0 },
+      { name: 'Matériel de taille', item_type: 'location', unit: 'j', unit_price_ht: 45, vat_rate: 20, total_ht: 0 },
     ],
   },
   {
@@ -93,8 +93,8 @@ const KEYWORD_RULES: {
     defaultQty: 1,
     qtyMultiplier: 0.02,
     items: [
-      { name: 'Transport benne déchets verts', item_type: 'location', unit: 'passage', unit_price_ht: 180, tva_rate: 20, total_ht: 0 },
-      { name: 'Éco-taxe déchets verts', item_type: 'fourniture', unit: 'T', unit_price_ht: 65, tva_rate: 20, total_ht: 0 },
+      { name: 'Transport benne déchets verts', item_type: 'location', unit: 'passage', unit_price_ht: 180, vat_rate: 20, total_ht: 0 },
+      { name: 'Éco-taxe déchets verts', item_type: 'fourniture', unit: 'T', unit_price_ht: 65, vat_rate: 20, total_ht: 0 },
     ],
   },
   {
@@ -105,9 +105,9 @@ const KEYWORD_RULES: {
     defaultQty: 5,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre plantation', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 40, tva_rate: 10, total_ht: 0 },
-      { name: 'Terreau plantation', item_type: 'materiau', unit: 'sac', unit_price_ht: 8.5, tva_rate: 10, total_ht: 0 },
-      { name: 'Engrais de fond', item_type: 'materiau', unit: 'kg', unit_price_ht: 3.2, tva_rate: 10, total_ht: 0 },
+      { name: 'Main d\'œuvre plantation', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 40, vat_rate: 10, total_ht: 0 },
+      { name: 'Terreau plantation', item_type: 'materiau', unit: 'sac', unit_price_ht: 8.5, vat_rate: 10, total_ht: 0 },
+      { name: 'Engrais de fond', item_type: 'materiau', unit: 'kg', unit_price_ht: 3.2, vat_rate: 10, total_ht: 0 },
     ],
   },
   {
@@ -118,8 +118,8 @@ const KEYWORD_RULES: {
     defaultQty: 50,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre terrassement', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 45, tva_rate: 10, total_ht: 0 },
-      { name: 'Location mini-pelle', item_type: 'location', unit: 'j', unit_price_ht: 280, tva_rate: 20, total_ht: 0 },
+      { name: 'Main d\'œuvre terrassement', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 45, vat_rate: 10, total_ht: 0 },
+      { name: 'Location mini-pelle', item_type: 'location', unit: 'j', unit_price_ht: 280, vat_rate: 20, total_ht: 0 },
     ],
   },
   {
@@ -130,9 +130,9 @@ const KEYWORD_RULES: {
     defaultQty: 1,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre installation arrosage', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 42, tva_rate: 10, total_ht: 0 },
-      { name: 'Tuyaux goutte-à-goutte', item_type: 'materiau', unit: 'ml', unit_price_ht: 1.8, tva_rate: 10, total_ht: 0 },
-      { name: 'Programmateur arrosage', item_type: 'fourniture', unit: 'u', unit_price_ht: 95, tva_rate: 10, total_ht: 0 },
+      { name: 'Main d\'œuvre installation arrosage', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 42, vat_rate: 10, total_ht: 0 },
+      { name: 'Tuyaux goutte-à-goutte', item_type: 'materiau', unit: 'ml', unit_price_ht: 1.8, vat_rate: 10, total_ht: 0 },
+      { name: 'Programmateur arrosage', item_type: 'fourniture', unit: 'u', unit_price_ht: 95, vat_rate: 10, total_ht: 0 },
     ],
   },
   {
@@ -143,8 +143,8 @@ const KEYWORD_RULES: {
     defaultQty: 100,
     qtyMultiplier: 1,
     items: [
-      { name: 'Semences gazon', item_type: 'materiau', unit: 'kg', unit_price_ht: 6.5, tva_rate: 10, total_ht: 0 },
-      { name: 'Main d\'œuvre ensemencement', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 38, tva_rate: 10, total_ht: 0 },
+      { name: 'Semences gazon', item_type: 'materiau', unit: 'kg', unit_price_ht: 6.5, vat_rate: 10, total_ht: 0 },
+      { name: 'Main d\'œuvre ensemencement', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 38, vat_rate: 10, total_ht: 0 },
     ],
   },
   {
@@ -155,9 +155,9 @@ const KEYWORD_RULES: {
     defaultQty: 30,
     qtyMultiplier: 1,
     items: [
-      { name: 'Main d\'œuvre pose dallage', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 48, tva_rate: 10, total_ht: 0 },
-      { name: 'Dalles béton 40x40', item_type: 'materiau', unit: 'm²', unit_price_ht: 12, tva_rate: 10, total_ht: 0 },
-      { name: 'Sable de pose', item_type: 'materiau', unit: 'T', unit_price_ht: 45, tva_rate: 10, total_ht: 0 },
+      { name: 'Main d\'œuvre pose dallage', item_type: 'main_oeuvre', unit: 'h', unit_price_ht: 48, vat_rate: 10, total_ht: 0 },
+      { name: 'Dalles béton 40x40', item_type: 'materiau', unit: 'm²', unit_price_ht: 12, vat_rate: 10, total_ht: 0 },
+      { name: 'Sable de pose', item_type: 'materiau', unit: 'T', unit_price_ht: 45, vat_rate: 10, total_ht: 0 },
     ],
   },
 ];
@@ -209,7 +209,7 @@ function parseTextToAnalysis(text: string): AIAnalysis {
   }
 
   const total_ht = items.reduce((sum, i) => sum + i.total_ht, 0);
-  const total_tva = items.reduce((sum, i) => sum + i.total_ht * (i.tva_rate / 100), 0);
+  const total_tva = items.reduce((sum, i) => sum + i.total_ht * (i.vat_rate / 100), 0);
   const total_ttc = total_ht + total_tva;
   const margin_percent = 32;
 
@@ -298,15 +298,24 @@ export default function DevisIAPage() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Fix bug 4: check for authenticated user
+      if (!user) {
+        setError('Utilisateur non authentifié');
+        setIsLoading(false);
+        return;
+      }
+
+      // Fix bug 1: use 'id' not 'auth_user_id'
       const { data: profile } = await supabase
         .from('user_profile')
         .select('company_id')
-        .eq('auth_user_id', user?.id ?? '')
+        .eq('id', user.id)
         .single();
 
       const companyId = profile?.company_id;
 
-      // Create ai_agent_run record
+      // Fix bug 2: removed 'created_by' column (does not exist in ai_agent_run)
       const { data: agentRun, error: runError } = await supabase
         .from('ai_agent_run')
         .insert({
@@ -314,7 +323,6 @@ export default function DevisIAPage() {
           agent_type: 'devis_assist' as const,
           input_data: { text: inputText },
           status: 'running',
-          created_by: user?.id,
         })
         .select()
         .single();
@@ -334,9 +342,13 @@ export default function DevisIAPage() {
         setIsLoading(false);
 
         if (agentRun?.id) {
+          // Fix bug 3: removed 'error_message' column, store error in output_data
           await supabase
             .from('ai_agent_run')
-            .update({ status: 'error', error_message: 'Aucune prestation détectée', output_data: { prestations: [] } })
+            .update({
+              status: 'error',
+              output_data: { error: 'Aucune prestation détectée', prestations: [] },
+            })
             .eq('id', agentRun.id);
         }
         return;
@@ -359,24 +371,23 @@ export default function DevisIAPage() {
           .eq('id', agentRun.id);
 
         // Create ai_proposal
-        const { data: proposal } = await supabase
+        await supabase
           .from('ai_proposal')
           .insert({
             company_id: companyId,
             agent_run_id: agentRun.id,
             entity_type: 'quote',
             entity_id: null,
-            proposal_type: 'pre_devis',
             title: `Pré-devis IA : ${result.object}`,
             description: inputText,
-            proposed_data: {
+            action_data: {
               object: result.object,
               items: result.items,
               total_ht: result.total_ht,
               total_ttc: result.total_ttc,
             },
             confidence_score: result.confidence_score / 100,
-            status: 'pending',
+            is_accepted: false,
           })
           .select()
           .single();
@@ -393,315 +404,232 @@ export default function DevisIAPage() {
     }
   };
 
-  const handleOpenWizard = () => {
+  const handleCreateQuote = () => {
     if (!analysis) return;
-    const params = new URLSearchParams({
-      object: analysis.object,
-      source: 'ia',
-      ...(agentRunId ? { agent_run_id: agentRunId } : {}),
-    });
-    router.push(`/dashboard/documents/devis/nouveau?${params.toString()}`);
+    // Navigate to quote creation with pre-filled data
+    router.push('/dashboard/documents/devis/nouveau');
   };
 
-  const examplePrompts = [
-    'Tonte pelouse 500m² + taille haie 30ml + évacuation déchets',
-    'Terrassement 80m² + plantation 10 arbustes + engazonnement',
-    'Création allée dallage 25m² + arrosage automatique',
+  const exampleTexts = [
+    'Tonte de gazon sur 200m², taille de haie 30ml et évacuation des déchets verts',
+    'Terrassement et nivellement d\'une zone de 80m² avec plantation de 10 arbres',
+    'Installation système d\'arrosage goutte-à-goutte et engazonnement 150m²',
+    'Dallage terrasse 40m² avec allée pavée 20m²',
   ];
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] text-white">
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
-      <div className="border-b border-white/10 bg-[#1a1a2e]/95 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
-              <Sparkles className="h-5 w-5 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Devis IA</h1>
-              <p className="text-sm text-white/50">Agent IA #3 — Génération automatique de devis</p>
-            </div>
-            <div className="ml-auto">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                IA Active
-              </span>
-            </div>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 rounded-xl bg-violet-100 dark:bg-violet-900/30">
+          <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Devis assisté par IA</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Décrivez vos travaux en langage naturel, l\'IA génère automatiquement le devis
+          </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* LEFT: Input Panel */}
-          <div className="flex flex-col gap-4">
-            <Card className="bg-white/5 border-white/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-400" />
-                  Décrivez votre chantier
+      {/* Input Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-500" />
+            Décrivez vos travaux
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Textarea
+            ref={textareaRef}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="Ex: Tonte de gazon sur 200m², taille de haie sur 30ml, évacuation des déchets verts..."
+            className="min-h-[120px] resize-none text-sm"
+          />
+
+          {/* Example chips */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 font-medium">Exemples :</p>
+            <div className="flex flex-wrap gap-2">
+              {exampleTexts.map((ex, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInputText(ex)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-violet-300 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                >
+                  {ex.length > 60 ? ex.slice(0, 60) + '…' : ex}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleGenerate}
+              disabled={isLoading || !inputText.trim()}
+              className="gap-2 bg-violet-600 hover:bg-violet-700"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyse en cours…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Générer le devis
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* Analysis Result */}
+      {analysis && (
+        <div className="space-y-6">
+          {/* Detected Prestations */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  Prestations détectées
                 </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <Textarea
-                  ref={textareaRef}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Décrivez le chantier : ex. Tonte 500m², taille haie 30ml, évacuation déchets..."
-                  className="min-h-[200px] bg-white/5 border-white/20 text-white placeholder:text-white/30 resize-none focus:border-emerald-500/50 focus:ring-emerald-500/20 text-base leading-relaxed"
-                  disabled={isLoading}
-                />
-
-                {/* Example prompts */}
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-white/40 uppercase tracking-wider font-medium">Exemples rapides</p>
-                  <div className="flex flex-col gap-2">
-                    {examplePrompts.map((prompt, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setInputText(prompt)}
-                        disabled={isLoading}
-                        className="text-left text-sm text-white/60 hover:text-emerald-400 transition-colors py-1 flex items-center gap-2 min-h-[36px] disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-emerald-500/50" />
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Error */}
-                {error && (
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-300">{error}</p>
-                  </div>
-                )}
-
-                {/* Generate Button */}
-                <Button
-                  onClick={handleGenerate}
-                  disabled={!inputText.trim() || isLoading}
-                  className={cn(
-                    'min-h-[52px] text-base font-semibold rounded-xl transition-all duration-200',
-                    'bg-emerald-500 hover:bg-emerald-400 text-white border-0',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    !isLoading && inputText.trim() && 'shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)]'
-                  )}
-                >
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Analyse en cours...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5" />
-                      Générer le devis
-                    </span>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* How it works */}
-            <Card className="bg-white/3 border-white/8">
-              <CardContent className="pt-4 pb-4">
-                <p className="text-xs text-white/40 uppercase tracking-wider font-medium mb-3">Comment ça fonctionne</p>
-                <div className="flex flex-col gap-3">
-                  {[
-                    { step: '1', text: 'Décrivez votre chantier en langage naturel' },
-                    { step: '2', text: 'L\'IA analyse et détecte les prestations' },
-                    { step: '3', text: 'Les articles du catalogue sont suggérés' },
-                    { step: '4', text: 'Ouvrez dans le wizard pour finaliser' },
-                  ].map((item) => (
-                    <div key={item.step} className="flex items-start gap-3">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold shrink-0 mt-0.5">
-                        {item.step}
-                      </span>
-                      <p className="text-sm text-white/50">{item.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* RIGHT: Preview Panel */}
-          <div className="flex flex-col gap-4">
-            {!analysis && !isLoading && (
-              <div className="flex flex-col items-center justify-center min-h-[400px] rounded-2xl border border-dashed border-white/10 bg-white/2">
-                <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-                  <Sparkles className="h-7 w-7 text-emerald-400/50" />
-                </div>
-                <p className="text-white/30 text-sm text-center max-w-[240px]">
-                  La prévisualisation du devis apparaîtra ici après analyse
-                </p>
+                <ConfidenceBadge score={analysis.confidence_score} />
               </div>
-            )}
-
-            {isLoading && (
-              <div className="flex flex-col items-center justify-center min-h-[400px] rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center">
-                    <Sparkles className="h-7 w-7 text-emerald-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {analysis.prestations.map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800"
+                  >
+                    <span className="text-violet-600 dark:text-violet-400">{p.icon}</span>
+                    <span className="text-sm font-medium text-violet-700 dark:text-violet-300">{p.label}</span>
+                    {p.quantity && p.unit && (
+                      <Badge variant="outline" className="text-xs">
+                        {p.quantity} {p.unit}
+                      </Badge>
+                    )}
                   </div>
-                  <div className="absolute inset-0 rounded-2xl border border-emerald-500/30 animate-ping" />
-                </div>
-                <div className="mt-6 flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 text-emerald-400 animate-spin" />
-                  <p className="text-emerald-300 text-sm font-medium">Analyse du chantier en cours...</p>
-                </div>
-                <div className="mt-3 flex flex-col items-center gap-1">
-                  <p className="text-white/30 text-xs">Détection des prestations</p>
-                  <p className="text-white/30 text-xs">Recherche des articles catalogue</p>
-                  <p className="text-white/30 text-xs">Calcul des estimations</p>
-                </div>
+                ))}
               </div>
-            )}
+            </CardContent>
+          </Card>
 
-            {analysis && !isLoading && (
-              <>
-                {/* Header bar */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-300">Analyse terminée</p>
-                      <p className="text-xs text-white/50">{analysis.prestations.length} prestation(s) détectée(s)</p>
-                    </div>
-                  </div>
-                  <ConfidenceBadge score={analysis.confidence_score} />
-                </div>
-
-                {/* Object */}
-                <Card className="bg-white/5 border-white/10">
-                  <CardContent className="pt-4 pb-4">
-                    <p className="text-xs text-white/40 uppercase tracking-wider font-medium mb-2">Objet du devis</p>
-                    <p className="text-white font-medium text-sm">{analysis.object}</p>
-                  </CardContent>
-                </Card>
-
-                {/* Prestations détectées */}
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <Leaf className="h-4 w-4 text-emerald-400" />
-                      Prestations détectées
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-2">
-                    {analysis.prestations.map((p, i) => (
-                      <div
+          {/* Items Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-blue-500" />
+                Détail des lignes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800">
+                      <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Désignation</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Qté</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 dark:text-gray-400">PU HT</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 dark:text-gray-400">TVA</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Total HT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis.items.map((item, i) => (
+                      <tr
                         key={i}
-                        className="flex items-center justify-between p-3 rounded-lg bg-white/3 border border-white/8"
+                        className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-emerald-400">{p.icon}</span>
-                          <span className="text-sm text-white/90">{p.label}</span>
-                        </div>
-                        {p.quantity && (
-                          <span className="text-sm font-mono text-emerald-300">
-                            {p.quantity} {p.unit}
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{item.name}</td>
+                        <td className="px-4 py-3">
+                          <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', getItemTypeBadgeColor(item.item_type))}>
+                            {getItemTypeLabel(item.item_type)}
                           </span>
-                        )}
-                      </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
+                          {item.quantity} {item.unit}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
+                          {formatCurrency(item.unit_price_ht)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-500">{item.vat_rate}%</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">
+                          {formatCurrency(item.total_ht)}
+                        </td>
+                      </tr>
                     ))}
-                  </CardContent>
-                </Card>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
 
-                {/* Articles suggérés */}
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <Package className="h-4 w-4 text-emerald-400" />
-                      Articles catalogue suggérés
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-2">
-                      {analysis.items.map((item, i) => (
-                        <div
-                          key={i}
-                          className="grid grid-cols-[1fr_auto] gap-2 p-3 rounded-lg bg-white/3 border border-white/8"
-                        >
-                          <div className="flex flex-col gap-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm text-white/90 truncate">{item.name}</span>
-                              <span
-                                className={cn(
-                                  'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
-                                  getItemTypeBadgeColor(item.item_type)
-                                )}
-                              >
-                                {getItemTypeLabel(item.item_type)}
-                              </span>
-                            </div>
-                            <p className="text-xs text-white/40">
-                              {item.quantity} {item.unit} × {formatCurrency(item.unit_price_ht)} HT
-                            </p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-semibold text-white">{formatCurrency(item.total_ht)}</p>
-                            <p className="text-[10px] text-white/30">HT</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Totals */}
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4 text-emerald-400" />
-                      Estimation financière
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-white/60">Total HT</span>
-                        <span className="text-sm font-medium text-white">{formatCurrency(analysis.total_ht)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-white/60">Total TVA</span>
-                        <span className="text-sm text-white/60">{formatCurrency(analysis.total_tva)}</span>
-                      </div>
-                      <Separator className="bg-white/10" />
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-base font-semibold text-white">Total TTC</span>
-                        <span className="text-base font-bold text-emerald-400">{formatCurrency(analysis.total_ttc)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2 px-3 mt-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <span className="text-sm text-emerald-300">Marge estimée</span>
-                        <span className="text-sm font-bold text-emerald-300">{analysis.margin_percent}%</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* CTA */}
-                <Button
-                  onClick={handleOpenWizard}
-                  className="min-h-[52px] text-base font-semibold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white border-0 shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] transition-all duration-200"
-                >
-                  <span className="flex items-center gap-2">
-                    Ouvrir dans le wizard de devis
-                    <ArrowRight className="h-5 w-5" />
+          {/* Totals */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-end gap-2 text-sm">
+                <div className="flex justify-between w-full max-w-xs">
+                  <span className="text-gray-500">Total HT</span>
+                  <span className="font-medium">{formatCurrency(analysis.total_ht)}</span>
+                </div>
+                <div className="flex justify-between w-full max-w-xs">
+                  <span className="text-gray-500">Total TVA</span>
+                  <span className="font-medium">{formatCurrency(analysis.total_tva)}</span>
+                </div>
+                <Separator className="w-full max-w-xs" />
+                <div className="flex justify-between w-full max-w-xs">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">Total TTC</span>
+                  <span className="font-bold text-lg text-violet-600 dark:text-violet-400">
+                    {formatCurrency(analysis.total_ttc)}
                   </span>
-                </Button>
+                </div>
+                <div className="flex justify-between w-full max-w-xs mt-1">
+                  <span className="text-gray-500">Marge estimée</span>
+                  <Badge variant="outline" className="text-emerald-600 border-emerald-200">
+                    ~{analysis.margin_percent}%
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                <p className="text-xs text-white/30 text-center">
-                  Les données pré-remplies pourront être modifiées dans le wizard
-                </p>
-              </>
-            )}
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAnalysis(null);
+                setInputText('');
+              }}
+            >
+              Recommencer
+            </Button>
+            <Button
+              onClick={handleCreateQuote}
+              className="gap-2 bg-violet-600 hover:bg-violet-700"
+            >
+              Créer le devis
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

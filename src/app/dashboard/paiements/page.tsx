@@ -40,7 +40,15 @@ type PaymentWithJoins = PaymentRow & {
   }) | null;
 };
 
-type PaymentLinkWithJoins = PaymentLinkRow & {
+type PaymentLinkWithJoins = {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  expires_at: string | null;
+  is_used: boolean;
+  stripe_session_id: string | null;
+  token: string;
+  created_at: string;
   invoice: Pick<InvoiceRow, 'reference'> | null;
 };
 
@@ -121,7 +129,7 @@ export default function PaiementsPage() {
   // Register payment dialog
   const [showRegisterDialog, setShowRegisterDialog] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
-  const [invoices, setInvoices] = useState<Pick<InvoiceRow, 'id' | 'reference' | 'remaining_ttc'>[]>([]);
+  const [invoices, setInvoices] = useState<Pick<InvoiceRow, 'id' | 'reference' | 'remaining_due'>[]>([]);
   const [registerForm, setRegisterForm] = useState({
     invoice_id: '',
     amount: '',
@@ -145,10 +153,11 @@ export default function PaiementsPage() {
   const fetchCompanyId = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
+    // user_profile.id is the PK that references auth.users(id)
     const { data } = await supabase
       .from('user_profile')
       .select('company_id')
-      .eq('auth_user_id', user.id)
+      .eq('id', user.id)
       .single();
     return data?.company_id ?? null;
   }, [supabase]);
@@ -158,7 +167,7 @@ export default function PaiementsPage() {
     let query = supabase
       .from('payment')
       .select(
-        'id, company_id, invoice_id, amount, payment_method, payment_date, reference, notes, stripe_payment_id, created_at, invoice:invoice_id(reference, total_ttc, client_id, client:client_id(company_name, first_name, last_name))'
+        'id, company_id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at, created_by, invoice:invoice_id(reference, total_ttc, client_id, client:client_id(company_name, first_name, last_name))'
       )
       .eq('company_id', companyId)
       .order('payment_date', { ascending: false });
@@ -178,11 +187,26 @@ export default function PaiementsPage() {
 
   const fetchPaymentLinks = useCallback(async (companyId: string) => {
     setLoadingLinks(true);
+    // payment_link has no company_id; join through invoice to filter by company
+    const { data: invoiceIds } = await supabase
+      .from('invoice')
+      .select('id')
+      .eq('company_id', companyId);
+
+    const ids = (invoiceIds ?? []).map((inv: { id: string }) => inv.id);
+
+    if (ids.length === 0) {
+      setPaymentLinks([]);
+      setLoadingLinks(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('payment_link')
-      .select('id, company_id, invoice_id, quote_id, stripe_link_id, stripe_link_url, amount, currency, is_active, expires_at, created_at, invoice:invoice_id(reference)')
-      .eq('company_id', companyId)
+      .select('id, invoice_id, amount, expires_at, is_used, stripe_session_id, token, created_at, invoice:invoice_id(reference)')
+      .in('invoice_id', ids)
       .order('created_at', { ascending: false });
+
     if (error) {
       toast({ title: 'Erreur', description: 'Impossible de charger les liens de paiement', variant: 'destructive' });
     } else {
@@ -197,6 +221,13 @@ export default function PaiementsPage() {
     const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
+    // Get invoice ids for this company to count active payment links
+    const { data: companyInvoiceIds } = await supabase
+      .from('invoice')
+      .select('id')
+      .eq('company_id', companyId);
+    const invoiceIdList = (companyInvoiceIds ?? []).map((inv: { id: string }) => inv.id);
+
     const [{ data: encaisseData }, { data: invoicesData }, { data: linksData }] = await Promise.all([
       supabase
         .from('payment')
@@ -206,18 +237,20 @@ export default function PaiementsPage() {
         .lte('payment_date', lastOfMonth),
       supabase
         .from('invoice')
-        .select('remaining_ttc')
+        .select('remaining_due')
         .eq('company_id', companyId)
         .in('status', ['envoyee', 'partiellement_payee', 'en_retard']),
-      supabase
-        .from('payment_link')
-        .select('id')
-        .eq('company_id', companyId)
-        .eq('is_active', true),
+      invoiceIdList.length > 0
+        ? supabase
+            .from('payment_link')
+            .select('id')
+            .in('invoice_id', invoiceIdList)
+            .eq('is_used', false)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const total = (encaisseData ?? []).reduce((sum: number, p: { amount: number }) => sum + (p.amount ?? 0), 0);
-    const attente = (invoicesData ?? []).reduce((sum: number, inv: { remaining_ttc: number | null }) => sum + (inv.remaining_ttc ?? 0), 0);
+    const attente = (invoicesData ?? []).reduce((sum: number, inv: { remaining_due: number | null }) => sum + (inv.remaining_due ?? 0), 0);
     setKpiEncaisse(total);
     setKpiEnAttente(attente);
     setKpiLiensActifs((linksData ?? []).length);
@@ -238,11 +271,11 @@ export default function PaiementsPage() {
   const fetchInvoicesForSelect = useCallback(async (companyId: string) => {
     const { data } = await supabase
       .from('invoice')
-      .select('id, reference, remaining_ttc')
+      .select('id, reference, remaining_due')
       .eq('company_id', companyId)
       .in('status', ['envoyee', 'partiellement_payee', 'en_retard'])
       .order('date_emission', { ascending: false });
-    setInvoices((data ?? []) as Pick<InvoiceRow, 'id' | 'reference' | 'remaining_ttc'>[]);
+    setInvoices((data ?? []) as Pick<InvoiceRow, 'id' | 'reference' | 'remaining_due'>[]);
   }, [supabase]);
 
   useEffect(() => {
@@ -307,15 +340,10 @@ export default function PaiementsPage() {
     const companyId = await fetchCompanyId();
     if (!companyId) { setCreateLinkLoading(false); return; }
 
+    // payment_link only has: invoice_id (NOT NULL), amount, expires_at, token (has default), is_used (has default), stripe_session_id
     const { error } = await supabase.from('payment_link').insert({
-      company_id: companyId,
-      invoice_id: createLinkForm.invoice_id || null,
-      quote_id: null,
-      stripe_link_id: null,
-      stripe_link_url: null,
+      invoice_id: createLinkForm.invoice_id,
       amount: parseFloat(createLinkForm.amount),
-      currency: 'eur',
-      is_active: true,
       expires_at: createLinkForm.expires_at ? new Date(createLinkForm.expires_at).toISOString() : null,
     });
 
@@ -342,23 +370,23 @@ export default function PaiementsPage() {
     }
   };
 
-  const handleToggleLinkActive = async (linkId: string, currentActive: boolean) => {
+  const handleToggleLinkUsed = async (linkId: string, currentUsed: boolean) => {
     const companyId = await fetchCompanyId();
     const { error } = await supabase
       .from('payment_link')
-      .update({ is_active: !currentActive })
+      .update({ is_used: !currentUsed })
       .eq('id', linkId);
     if (error) {
       toast({ title: 'Erreur', description: error.message, variant: 'destructive' });
     } else {
-      toast({ title: 'Mis à jour', description: `Lien ${!currentActive ? 'activé' : 'désactivé'}.` });
+      toast({ title: 'Mis à jour', description: `Lien ${!currentUsed ? 'marqué comme utilisé' : 'réactivé'}.` });
       if (companyId) await fetchPaymentLinks(companyId);
     }
   };
 
   const filteredPayments = payments;
 
-  const stripeConnected = !!(companySettings?.stripe_public_key);
+  const stripeConnected = !!(companySettings?.smtp_settings);
 
   return (
     <div className="min-h-screen bg-[#0f0f23] text-white">
@@ -367,621 +395,452 @@ export default function PaiementsPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Paiements</h1>
-            <p className="text-sm text-white/60 mt-0.5">Suivi des encaissements et liens Stripe</p>
+            <p className="text-sm text-white/60 mt-1">Gérez vos encaissements et liens de paiement</p>
           </div>
-          <Button
-            onClick={() => setShowRegisterDialog(true)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white min-h-[48px] gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Enregistrer un paiement</span>
-            <span className="sm:hidden">Paiement</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setShowRegisterDialog(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Enregistrer un paiement
+            </Button>
+            <Button
+              onClick={() => setShowCreateLinkDialog(true)}
+              variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
+            >
+              <Link2 className="h-4 w-4 mr-1" />
+              Créer un lien
+            </Button>
+          </div>
         </div>
 
-        {/* KPI Cards */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <KpiCard
-            title="Total encaissé (ce mois)"
+            title="Encaissé ce mois"
             value={formatCurrency(kpiEncaisse)}
             icon={<Euro className="h-5 w-5" />}
             loading={loadingKpis}
             color="bg-emerald-500/20 text-emerald-400"
           />
           <KpiCard
-            title="En attente de paiement"
+            title="En attente"
             value={formatCurrency(kpiEnAttente)}
             icon={<Clock className="h-5 w-5" />}
             loading={loadingKpis}
             color="bg-amber-500/20 text-amber-400"
           />
           <KpiCard
-            title="Liens de paiement actifs"
-            value={kpiLiensActifs.toString()}
+            title="Liens actifs"
+            value={String(kpiLiensActifs)}
             icon={<Link2 className="h-5 w-5" />}
             loading={loadingKpis}
             color="bg-blue-500/20 text-blue-400"
           />
         </div>
 
-        {/* Main Tabs */}
-        <Tabs defaultValue="historique" className="space-y-4">
-          <TabsList className="bg-white/5 border border-white/10 h-auto p-1 grid grid-cols-3 w-full">
-            <TabsTrigger
-              value="historique"
-              className="min-h-[44px] data-[state=active]:bg-emerald-500 data-[state=active]:text-white text-white/60 text-sm"
-            >
-              Historique
+        {/* Tabs */}
+        <Tabs defaultValue="payments">
+          <TabsList className="bg-white/5 border border-white/10">
+            <TabsTrigger value="payments" className="data-[state=active]:bg-white/10 text-white">
+              Paiements reçus
             </TabsTrigger>
-            <TabsTrigger
-              value="liens"
-              className="min-h-[44px] data-[state=active]:bg-emerald-500 data-[state=active]:text-white text-white/60 text-sm"
-            >
+            <TabsTrigger value="links" className="data-[state=active]:bg-white/10 text-white">
               Liens de paiement
-            </TabsTrigger>
-            <TabsTrigger
-              value="configuration"
-              className="min-h-[44px] data-[state=active]:bg-emerald-500 data-[state=active]:text-white text-white/60 text-sm"
-            >
-              Config. Stripe
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1 - Historique */}
-          <TabsContent value="historique" className="space-y-4">
+          {/* Payments Tab */}
+          <TabsContent value="payments" className="mt-4 space-y-4">
             {/* Filters */}
             <Card className="bg-[#1a1a2e] border-white/10">
               <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-                  <div className="flex items-center gap-2 text-white/60">
-                    <Filter className="h-4 w-4" />
-                    <span className="text-sm font-medium text-white">Filtres</span>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-white/60 text-xs">Du</Label>
+                    <Input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={e => setFilterDateFrom(e.target.value)}
+                      className="bg-white/5 border-white/10 text-white w-36"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 w-full">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-white/60">Du</Label>
-                      <Input
-                        type="date"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-white/60">Au</Label>
-                      <Input
-                        type="date"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-white/60">Méthode</Label>
-                      <Select value={filterMethod} onValueChange={setFilterMethod}>
-                        <SelectTrigger className="bg-white/5 border-white/10 text-white h-10">
-                          <SelectValue placeholder="Toutes" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
-                          <SelectItem value="all">Toutes</SelectItem>
-                          {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>{label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-white/60 text-xs">Au</Label>
+                    <Input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={e => setFilterDateTo(e.target.value)}
+                      className="bg-white/5 border-white/10 text-white w-36"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-white/60 text-xs">Méthode</Label>
+                    <Select value={filterMethod} onValueChange={setFilterMethod}>
+                      <SelectTrigger className="bg-white/5 border-white/10 text-white w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Toutes</SelectItem>
+                        {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map(m => (
+                          <SelectItem key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Button
                     variant="outline"
+                    className="border-white/20 text-white hover:bg-white/10"
                     onClick={async () => {
-                      const cid = await fetchCompanyId();
-                      if (cid) fetchPayments(cid);
+                      const companyId = await fetchCompanyId();
+                      if (companyId) await fetchPayments(companyId);
                     }}
-                    className="border-white/10 text-white hover:bg-white/10 min-h-[40px] whitespace-nowrap"
                   >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Appliquer
+                    <Filter className="h-4 w-4 mr-1" />
+                    Filtrer
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Payments Table */}
+            {/* Table */}
             <Card className="bg-[#1a1a2e] border-white/10">
               <CardContent className="p-0">
-                {loadingPayments ? (
-                  <div className="p-6 space-y-3">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full bg-white/10" />
-                    ))}
-                  </div>
-                ) : filteredPayments.length === 0 ? (
-                  <div className="p-12 text-center text-white/40">
-                    <Euro className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                    <p className="text-sm">Aucun paiement enregistré</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-white/10 hover:bg-transparent">
-                          <TableHead className="text-white/60 font-medium">Date</TableHead>
-                          <TableHead className="text-white/60 font-medium">Facture</TableHead>
-                          <TableHead className="text-white/60 font-medium">Client</TableHead>
-                          <TableHead className="text-white/60 font-medium text-right">Montant</TableHead>
-                          <TableHead className="text-white/60 font-medium">Méthode</TableHead>
-                          <TableHead className="text-white/60 font-medium hidden lg:table-cell">Réf. Stripe</TableHead>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="text-white/60">Date</TableHead>
+                      <TableHead className="text-white/60">Facture</TableHead>
+                      <TableHead className="text-white/60">Client</TableHead>
+                      <TableHead className="text-white/60">Méthode</TableHead>
+                      <TableHead className="text-white/60 text-right">Montant</TableHead>
+                      <TableHead className="text-white/60">Référence</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingPayments ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i} className="border-white/10">
+                          {Array.from({ length: 6 }).map((__, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-full bg-white/10" /></TableCell>
+                          ))}
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredPayments.map((payment) => (
-                          <TableRow key={payment.id} className="border-white/10 hover:bg-white/5">
-                            <TableCell className="text-white/80 text-sm">
-                              {formatDate(payment.payment_date)}
-                            </TableCell>
-                            <TableCell>
-                              <span className="font-mono text-sm text-emerald-400">
-                                {payment.invoice?.reference ?? '—'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-white/80 text-sm">
-                              {getClientName(payment.invoice?.client ?? null)}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-white">
-                              {formatCurrency(payment.amount)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className="border-white/20 text-white/70 gap-1 text-xs"
-                              >
-                                {PAYMENT_METHOD_ICONS[payment.payment_method as PaymentMethod]}
-                                {PAYMENT_METHOD_LABELS[payment.payment_method as PaymentMethod] ?? payment.payment_method}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell text-white/40 font-mono text-xs">
-                              {payment.stripe_payment_id ?? payment.reference ?? '—'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab 2 - Liens de paiement */}
-          <TabsContent value="liens" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-white/60">{paymentLinks.length} lien(s) au total</p>
-              <Button
-                onClick={() => setShowCreateLinkDialog(true)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white min-h-[48px] gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Créer un lien
-              </Button>
-            </div>
-
-            <Card className="bg-[#1a1a2e] border-white/10">
-              <CardContent className="p-0">
-                {loadingLinks ? (
-                  <div className="p-6 space-y-3">
-                    {[...Array(4)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full bg-white/10" />
-                    ))}
-                  </div>
-                ) : paymentLinks.length === 0 ? (
-                  <div className="p-12 text-center text-white/40">
-                    <Link2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                    <p className="text-sm">Aucun lien de paiement créé</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-white/10 hover:bg-transparent">
-                          <TableHead className="text-white/60 font-medium">Facture</TableHead>
-                          <TableHead className="text-white/60 font-medium text-right">Montant</TableHead>
-                          <TableHead className="text-white/60 font-medium">Lien Stripe</TableHead>
-                          <TableHead className="text-white/60 font-medium">Actif</TableHead>
-                          <TableHead className="text-white/60 font-medium hidden md:table-cell">Expiration</TableHead>
-                          <TableHead className="text-white/60 font-medium">Actions</TableHead>
+                      ))
+                    ) : filteredPayments.length === 0 ? (
+                      <TableRow className="border-white/10">
+                        <TableCell colSpan={6} className="text-center text-white/40 py-12">
+                          Aucun paiement trouvé
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredPayments.map(payment => (
+                        <TableRow key={payment.id} className="border-white/10 hover:bg-white/5">
+                          <TableCell className="text-white text-sm">
+                            {formatDate(payment.payment_date)}
+                          </TableCell>
+                          <TableCell className="text-white text-sm">
+                            {payment.invoice?.reference ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-white text-sm">
+                            {getClientName(payment.invoice?.client ?? null)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="border-white/20 text-white gap-1">
+                              {PAYMENT_METHOD_ICONS[payment.payment_method as PaymentMethod]}
+                              {PAYMENT_METHOD_LABELS[payment.payment_method as PaymentMethod] ?? payment.payment_method}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-emerald-400 font-semibold">
+                            {formatCurrency(payment.amount)}
+                          </TableCell>
+                          <TableCell className="text-white/60 text-sm">
+                            {payment.reference ?? '—'}
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paymentLinks.map((link) => (
-                          <TableRow key={link.id} className="border-white/10 hover:bg-white/5">
-                            <TableCell>
-                              <span className="font-mono text-sm text-emerald-400">
-                                {link.invoice?.reference ?? (link.quote_id ? `Devis` : '—')}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-white">
-                              {formatCurrency(link.amount)}
-                            </TableCell>
-                            <TableCell className="max-w-[160px]">
-                              {link.stripe_link_url ? (
-                                <span className="text-blue-400 text-xs truncate block max-w-[140px]" title={link.stripe_link_url}>
-                                  {link.stripe_link_url}
-                                </span>
-                              ) : (
-                                <span className="text-white/30 text-xs">Non généré</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {link.is_active ? (
-                                <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Actif
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-red-500/20 text-red-400 border-0 text-xs">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Inactif
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-white/60 text-sm">
-                              {link.expires_at ? formatDate(link.expires_at) : '—'}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {link.stripe_link_url && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="min-h-[36px] min-w-[36px] p-0 text-white/60 hover:text-white hover:bg-white/10"
-                                    onClick={() => handleCopyLink(link.stripe_link_url!, link.id)}
-                                    title="Copier le lien"
-                                  >
-                                    {copiedId === link.id ? (
-                                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                                    ) : (
-                                      <Copy className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className={cn(
-                                    'min-h-[36px] min-w-[36px] p-0 hover:bg-white/10',
-                                    link.is_active ? 'text-red-400 hover:text-red-300' : 'text-emerald-400 hover:text-emerald-300'
-                                  )}
-                                  onClick={() => handleToggleLinkActive(link.id, link.is_active)}
-                                  title={link.is_active ? 'Désactiver' : 'Activer'}
-                                >
-                                  {link.is_active ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab 3 - Configuration Stripe */}
-          <TabsContent value="configuration" className="space-y-4">
-            <Card className="bg-[#1a1a2e] border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-emerald-400" />
-                  Connexion Stripe
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {loadingSettings ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-12 w-full bg-white/10" />
-                    <Skeleton className="h-12 w-full bg-white/10" />
-                  </div>
-                ) : (
-                  <>
-                    {/* Status */}
-                    <div className="flex items-center gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
-                      <div className={cn(
-                        'p-3 rounded-full',
-                        stripeConnected ? 'bg-emerald-500/20' : 'bg-amber-500/20'
-                      )}>
-                        {stripeConnected ? (
-                          <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-                        ) : (
-                          <AlertCircle className="h-6 w-6 text-amber-400" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-white">
-                          {stripeConnected ? 'Stripe est configuré' : 'Stripe non configuré'}
-                        </p>
-                        <p className="text-sm text-white/60">
-                          {stripeConnected
-                            ? 'Les paiements en ligne sont activés pour votre compte.'
-                            : 'Configurez vos clés Stripe pour activer les paiements en ligne.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Publishable key */}
-                    {companySettings?.stripe_public_key && (
-                      <div className="space-y-2">
-                        <Label className="text-white/60 text-sm">Clé publique Stripe (Publishable Key)</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            readOnly
-                            value={`${companySettings.stripe_public_key.slice(0, 12)}${'•'.repeat(20)}`}
-                            className="bg-white/5 border-white/10 text-white/80 font-mono text-sm"
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-white/10 text-white/60 hover:bg-white/10 min-h-[40px]"
-                            onClick={() => handleCopyLink(companySettings.stripe_public_key!, 'pk')}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <p className="text-xs text-white/40">Utilisée pour l&apos;initialisation des éléments Stripe côté client.</p>
-                      </div>
+                      ))
                     )}
-
-                    {/* Info block */}
-                    <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                      <div className="flex gap-3">
-                        <AlertCircle className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-blue-300">Configuration complète dans les paramètres</p>
-                          <p className="text-xs text-blue-300/70">
-                            Pour configurer ou modifier vos clés Stripe (clé secrète, webhooks), rendez-vous dans les
-                            paramètres de l&apos;application.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      className="border-white/20 text-white hover:bg-white/10 min-h-[48px] gap-2 w-full sm:w-auto"
-                      onClick={() => window.location.href = '/dashboard/parametres'}
-                    >
-                      <Settings className="h-4 w-4" />
-                      Aller aux paramètres Stripe
-                    </Button>
-                  </>
-                )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* Stats */}
+          {/* Links Tab */}
+          <TabsContent value="links" className="mt-4">
             <Card className="bg-[#1a1a2e] border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white text-base">Résumé des paiements</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-lg bg-white/5">
-                  <p className="text-xs text-white/60">Total paiements</p>
-                  <p className="text-2xl font-bold text-white mt-1">{payments.length}</p>
-                </div>
-                <div className="p-4 rounded-lg bg-white/5">
-                  <p className="text-xs text-white/60">Via Stripe</p>
-                  <p className="text-2xl font-bold text-emerald-400 mt-1">
-                    {payments.filter(p => p.stripe_payment_id).length}
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-white/5">
-                  <p className="text-xs text-white/60">Liens actifs</p>
-                  <p className="text-2xl font-bold text-blue-400 mt-1">
-                    {paymentLinks.filter(l => l.is_active).length}
-                  </p>
-                </div>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="text-white/60">Facture</TableHead>
+                      <TableHead className="text-white/60">Token</TableHead>
+                      <TableHead className="text-white/60 text-right">Montant</TableHead>
+                      <TableHead className="text-white/60">Expiration</TableHead>
+                      <TableHead className="text-white/60">Statut</TableHead>
+                      <TableHead className="text-white/60">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingLinks ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <TableRow key={i} className="border-white/10">
+                          {Array.from({ length: 6 }).map((__, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-full bg-white/10" /></TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : paymentLinks.length === 0 ? (
+                      <TableRow className="border-white/10">
+                        <TableCell colSpan={6} className="text-center text-white/40 py-12">
+                          Aucun lien de paiement
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paymentLinks.map(link => (
+                        <TableRow key={link.id} className="border-white/10 hover:bg-white/5">
+                          <TableCell className="text-white text-sm">
+                            {link.invoice?.reference ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-white/60 text-xs font-mono">
+                            {link.token}
+                          </TableCell>
+                          <TableCell className="text-right text-white font-semibold">
+                            {formatCurrency(link.amount)}
+                          </TableCell>
+                          <TableCell className="text-white/60 text-sm">
+                            {link.expires_at ? formatDate(link.expires_at) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'border-white/20',
+                                link.is_used
+                                  ? 'text-white/40'
+                                  : 'text-emerald-400 border-emerald-400/30'
+                              )}
+                            >
+                              {link.is_used ? 'Utilisé' : 'Actif'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {link.stripe_session_id && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-white/60 hover:text-white"
+                                  onClick={() => handleCopyLink(link.stripe_session_id!, link.id)}
+                                  title="Copier le lien"
+                                >
+                                  {copiedId === link.id ? (
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-white/60 hover:text-white"
+                                onClick={() => handleToggleLinkUsed(link.id, link.is_used)}
+                                title={link.is_used ? 'Réactiver' : 'Marquer utilisé'}
+                              >
+                                {link.is_used ? (
+                                  <RefreshCw className="h-4 w-4" />
+                                ) : (
+                                  <XCircle className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Dialog: Enregistrer un paiement */}
+      {/* Register Payment Dialog */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
-        <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-lg w-[calc(100vw-2rem)] rounded-lg">
+        <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white">Enregistrer un paiement</DialogTitle>
+            <DialogTitle>Enregistrer un paiement</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-white/80">Facture <span className="text-red-400">*</span></Label>
+              <Label className="text-white/80">Facture *</Label>
               <Select
                 value={registerForm.invoice_id}
-                onValueChange={(v) => {
+                onValueChange={v => {
                   const inv = invoices.find(i => i.id === v);
                   setRegisterForm(f => ({
                     ...f,
                     invoice_id: v,
-                    amount: inv?.remaining_ttc ? inv.remaining_ttc.toString() : f.amount,
+                    amount: inv?.remaining_due != null ? String(inv.remaining_due) : f.amount,
                   }));
                 }}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white min-h-[48px]">
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Sélectionner une facture" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
-                  {invoices.map((inv) => (
+                <SelectContent>
+                  {invoices.map(inv => (
                     <SelectItem key={inv.id} value={inv.id}>
-                      {inv.reference} — {formatCurrency(inv.remaining_ttc ?? 0)} restant
+                      {inv.reference} — {formatCurrency(inv.remaining_due ?? 0)} restant
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-white/80">Montant (€) <span className="text-red-400">*</span></Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={registerForm.amount}
-                  onChange={(e) => setRegisterForm(f => ({ ...f, amount: e.target.value }))}
-                  className="bg-white/5 border-white/10 text-white min-h-[48px]"
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-white/80">Date <span className="text-red-400">*</span></Label>
-                <Input
-                  type="date"
-                  value={registerForm.payment_date}
-                  onChange={(e) => setRegisterForm(f => ({ ...f, payment_date: e.target.value }))}
-                  className="bg-white/5 border-white/10 text-white min-h-[48px] [color-scheme:dark]"
-                />
-              </div>
-            </div>
-
             <div className="space-y-1.5">
-              <Label className="text-white/80">Méthode de paiement <span className="text-red-400">*</span></Label>
+              <Label className="text-white/80">Montant (€) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={registerForm.amount}
+                onChange={e => setRegisterForm(f => ({ ...f, amount: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white"
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-white/80">Méthode de paiement *</Label>
               <Select
                 value={registerForm.payment_method}
-                onValueChange={(v) => setRegisterForm(f => ({ ...f, payment_method: v as PaymentMethod }))}
+                onValueChange={v => setRegisterForm(f => ({ ...f, payment_method: v as PaymentMethod }))}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white min-h-[48px]">
-                  <SelectValue placeholder="Choisir une méthode" />
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue placeholder="Sélectionner" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                <SelectContent>
+                  {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map(m => (
+                    <SelectItem key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1.5">
-              <Label className="text-white/80">Référence (optionnel)</Label>
+              <Label className="text-white/80">Date de paiement *</Label>
               <Input
-                value={registerForm.reference}
-                onChange={(e) => setRegisterForm(f => ({ ...f, reference: e.target.value }))}
-                className="bg-white/5 border-white/10 text-white min-h-[48px]"
-                placeholder="N° de virement, chèque..."
+                type="date"
+                value={registerForm.payment_date}
+                onChange={e => setRegisterForm(f => ({ ...f, payment_date: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white"
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label className="text-white/80">Notes (optionnel)</Label>
+              <Label className="text-white/80">Référence</Label>
+              <Input
+                value={registerForm.reference}
+                onChange={e => setRegisterForm(f => ({ ...f, reference: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white"
+                placeholder="N° chèque, virement..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-white/80">Notes</Label>
               <Textarea
                 value={registerForm.notes}
-                onChange={(e) => setRegisterForm(f => ({ ...f, notes: e.target.value }))}
+                onChange={e => setRegisterForm(f => ({ ...f, notes: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white resize-none"
-                rows={2}
-                placeholder="Informations complémentaires..."
+                rows={3}
               />
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
               onClick={() => setShowRegisterDialog(false)}
-              className="border-white/10 text-white hover:bg-white/10 min-h-[48px]"
-              disabled={registerLoading}
             >
               Annuler
             </Button>
             <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleRegisterPayment}
               disabled={registerLoading}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white min-h-[48px] gap-2"
             >
-              {registerLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
-              Enregistrer
+              {registerLoading ? 'Enregistrement...' : 'Enregistrer'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Créer un lien de paiement */}
+      {/* Create Link Dialog */}
       <Dialog open={showCreateLinkDialog} onOpenChange={setShowCreateLinkDialog}>
-        <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-lg w-[calc(100vw-2rem)] rounded-lg">
+        <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white">Créer un lien de paiement</DialogTitle>
+            <DialogTitle>Créer un lien de paiement</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-white/80">Facture <span className="text-red-400">*</span></Label>
+              <Label className="text-white/80">Facture *</Label>
               <Select
                 value={createLinkForm.invoice_id}
-                onValueChange={(v) => {
+                onValueChange={v => {
                   const inv = invoices.find(i => i.id === v);
                   setCreateLinkForm(f => ({
                     ...f,
                     invoice_id: v,
-                    amount: inv?.remaining_ttc ? inv.remaining_ttc.toString() : f.amount,
+                    amount: inv?.remaining_due != null ? String(inv.remaining_due) : f.amount,
                   }));
                 }}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white min-h-[48px]">
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Sélectionner une facture" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
-                  {invoices.map((inv) => (
+                <SelectContent>
+                  {invoices.map(inv => (
                     <SelectItem key={inv.id} value={inv.id}>
-                      {inv.reference} — {formatCurrency(inv.remaining_ttc ?? 0)}
+                      {inv.reference} — {formatCurrency(inv.remaining_due ?? 0)} restant
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1.5">
-              <Label className="text-white/80">Montant (€) <span className="text-red-400">*</span></Label>
+              <Label className="text-white/80">Montant (€) *</Label>
               <Input
                 type="number"
                 step="0.01"
-                min="0"
                 value={createLinkForm.amount}
-                onChange={(e) => setCreateLinkForm(f => ({ ...f, amount: e.target.value }))}
-                className="bg-white/5 border-white/10 text-white min-h-[48px]"
+                onChange={e => setCreateLinkForm(f => ({ ...f, amount: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white"
                 placeholder="0.00"
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label className="text-white/80">Date d&apos;expiration (optionnel)</Label>
+              <Label className="text-white/80">Date d'expiration</Label>
               <Input
                 type="date"
                 value={createLinkForm.expires_at}
-                onChange={(e) => setCreateLinkForm(f => ({ ...f, expires_at: e.target.value }))}
-                className="bg-white/5 border-white/10 text-white min-h-[48px] [color-scheme:dark]"
+                onChange={e => setCreateLinkForm(f => ({ ...f, expires_at: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white"
               />
             </div>
-
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-300">
-                Le lien Stripe sera généré via l&apos;API Stripe. Assurez-vous que Stripe est correctement configuré dans les paramètres.
-              </p>
-            </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
               onClick={() => setShowCreateLinkDialog(false)}
-              className="border-white/10 text-white hover:bg-white/10 min-h-[48px]"
-              disabled={createLinkLoading}
             >
               Annuler
             </Button>
             <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleCreateLink}
               disabled={createLinkLoading}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white min-h-[48px] gap-2"
             >
-              {createLinkLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
-              Créer le lien
+              {createLinkLoading ? 'Création...' : 'Créer'}
             </Button>
           </DialogFooter>
         </DialogContent>

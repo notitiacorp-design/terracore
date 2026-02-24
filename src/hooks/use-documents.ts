@@ -69,7 +69,7 @@ export function useDocuments(): UseDocumentsReturn {
           .from('quote')
           .select(`
             *,
-            client:client (
+            client:client_id (
               id,
               company_name,
               first_name,
@@ -112,7 +112,7 @@ export function useDocuments(): UseDocumentsReturn {
           .from('invoice')
           .select(`
             *,
-            client:client (
+            client:client_id (
               id,
               company_name,
               first_name,
@@ -159,8 +159,31 @@ export function useDocuments(): UseDocumentsReturn {
         }
 
         const newQuote = created as QuoteRow;
-        const quoteWithClient: QuoteWithClient = { ...newQuote, client: null };
-        setQuotes((prev) => [quoteWithClient, ...prev]);
+
+        // Fetch the newly created quote with joined client data
+        const { data: quoteWithClientData, error: fetchError } = await supabase
+          .from('quote')
+          .select(`
+            *,
+            client:client_id (
+              id,
+              company_name,
+              first_name,
+              last_name,
+              email
+            )
+          `)
+          .eq('id', newQuote.id)
+          .single();
+
+        if (fetchError || !quoteWithClientData) {
+          // Fall back to adding without client data
+          const quoteWithClient: QuoteWithClient = { ...newQuote, client: null };
+          setQuotes((prev) => [quoteWithClient, ...prev]);
+        } else {
+          setQuotes((prev) => [quoteWithClientData as QuoteWithClient, ...prev]);
+        }
+
         return { data: newQuote, error: null };
       } catch (err) {
         return {

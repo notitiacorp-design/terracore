@@ -61,7 +61,7 @@ function getClientDisplayName(client: ClientRow): string {
 function groupTvaRates(lines: any[]): Record<number, number> {
   const groups: Record<number, number> = {};
   for (const line of lines) {
-    const rate = Number(line.tva_rate ?? 0);
+    const rate = Number(line.vat_rate ?? 0);
     const totalHt = Number(line.total_ht ?? 0);
     const tvaAmount = totalHt * (rate / 100);
     if (!groups[rate]) groups[rate] = 0;
@@ -652,7 +652,7 @@ export function DocumentPdf({
                           {formatFrenchCurrency(Number(line.unit_price_ht ?? 0))}
                         </td>
                         <td className="py-2 px-2 text-right text-xs align-top text-gray-500">
-                          {formatFrenchNumber(Number(line.tva_rate ?? 0))} %
+                          {formatFrenchNumber(Number(line.vat_rate ?? 0))} %
                         </td>
                         <td
                           className="py-2 px-2 text-right text-xs align-top font-semibold"

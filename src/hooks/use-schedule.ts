@@ -15,7 +15,7 @@ import type {
 
 export interface ScheduleEventWithDetails extends ScheduleEventRow {
   client: Pick<ClientRow, 'company_name' | 'first_name' | 'last_name'> | null;
-  site_address: Pick<SiteAddressRow, 'label' | 'address' | 'city' | 'latitude' | 'longitude'> | null;
+  site_address: Pick<SiteAddressRow, 'label' | 'street' | 'city' | 'latitude' | 'longitude'> | null;
   employees: EmployeeRow[];
 }
 
@@ -66,7 +66,7 @@ export function useSchedule(): UseScheduleReturn {
             ),
             site_address:site_address_id (
               label,
-              address,
+              street,
               city,
               latitude,
               longitude
@@ -122,7 +122,7 @@ export function useSchedule(): UseScheduleReturn {
           site_address:
             (event.site_address as Pick<
               SiteAddressRow,
-              'label' | 'address' | 'city' | 'latitude' | 'longitude'
+              'label' | 'street' | 'city' | 'latitude' | 'longitude'
             > | null) ?? null,
           employees: employeesByEvent[event.id] ?? [],
         }));
@@ -257,7 +257,7 @@ export function useSchedule(): UseScheduleReturn {
       try {
         const { data: existing } = await supabase
           .from('schedule_event_employee')
-          .select('id')
+          .select('*')
           .eq('schedule_event_id', eventId)
           .eq('employee_id', employeeId)
           .maybeSingle();
@@ -344,10 +344,33 @@ export function useSchedule(): UseScheduleReturn {
     async (eventId: string): Promise<WeatherSnapshotRow[]> => {
       setError(null);
       try {
+        // First, retrieve the event's site_address_id and start_datetime
+        const { data: eventData, error: eventError } = await supabase
+          .from('schedule_event')
+          .select('site_address_id, start_datetime')
+          .eq('id', eventId)
+          .single();
+
+        if (eventError) {
+          throw new Error(eventError.message);
+        }
+
+        if (!eventData || !eventData.site_address_id) {
+          const result: WeatherSnapshotRow[] = [];
+          setWeatherSnapshots((prev) => ({
+            ...prev,
+            [eventId]: result,
+          }));
+          return result;
+        }
+
+        const eventDate = eventData.start_datetime.slice(0, 10);
+
         const { data: snapshots, error: weatherError } = await supabase
           .from('weather_snapshot')
           .select('*')
-          .eq('schedule_event_id', eventId)
+          .eq('site_address_id', eventData.site_address_id)
+          .eq('date', eventDate)
           .order('date', { ascending: true });
 
         if (weatherError) {

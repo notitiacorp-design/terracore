@@ -19,7 +19,7 @@ import type {
 export interface WorkflowWithMessages extends ReminderWorkflowRow {
   reminder_message: ReminderMessageRow[];
   client?: Pick<ClientRow, 'id' | 'first_name' | 'last_name' | 'company_name' | 'client_type' | 'email'>;
-  invoice?: Pick<InvoiceRow, 'id' | 'reference' | 'total_ttc' | 'remaining_ttc' | 'date_echeance' | 'status'>;
+  invoice?: Pick<InvoiceRow, 'id' | 'reference' | 'total_ttc' | 'remaining_due' | 'date_due' | 'status'>;
 }
 
 export interface FetchWorkflowsFilters {
@@ -99,7 +99,7 @@ export function useReminders(): UseRemindersReturn {
           .from('reminder_workflow')
           .select('*')
           .eq('company_id', companyId)
-          .order('created_at', { ascending: false });
+          .order('started_at', { ascending: false });
 
         if (filters?.is_active !== undefined) {
           query = query.eq('is_active', filters.is_active);
@@ -154,8 +154,8 @@ export function useReminders(): UseRemindersReturn {
               id,
               reference,
               total_ttc,
-              remaining_ttc,
-              date_echeance,
+              remaining_due,
+              date_due,
               status
             )
           `,
@@ -264,8 +264,7 @@ export function useReminders(): UseRemindersReturn {
           .update({
             is_active: false,
             stopped_at: now,
-            stopped_reason: reason,
-            updated_at: now,
+            stop_reason: reason,
           } as ReminderWorkflowUpdate)
           .eq('id', id)
           .select()
@@ -335,7 +334,7 @@ export function useReminders(): UseRemindersReturn {
         // Fetch all invoices for this client in the company
         const { data: invoices, error: invoiceError } = await supabase
           .from('invoice')
-          .select('id, status, remaining_ttc, date_echeance')
+          .select('id, status, remaining_due, date_due')
           .eq('company_id', companyId)
           .eq('client_id', clientId)
           .neq('status', 'annulee');
@@ -344,7 +343,7 @@ export function useReminders(): UseRemindersReturn {
 
         const allInvoices = (invoices ?? []) as Pick<
           InvoiceRow,
-          'id' | 'status' | 'remaining_ttc' | 'date_echeance'
+          'id' | 'status' | 'remaining_due' | 'date_due'
         >[];
 
         const total_count = allInvoices.length;
@@ -366,17 +365,17 @@ export function useReminders(): UseRemindersReturn {
           const isOverdueStatus =
             inv.status === 'en_retard' ||
             (inv.status === 'envoyee' &&
-              inv.date_echeance != null &&
-              new Date(inv.date_echeance) < now) ||
+              inv.date_due != null &&
+              new Date(inv.date_due) < now) ||
             (inv.status === 'partiellement_payee' &&
-              inv.date_echeance != null &&
-              new Date(inv.date_echeance) < now);
+              inv.date_due != null &&
+              new Date(inv.date_due) < now);
           return isOverdueStatus;
         });
 
         const overdue_count = overdueInvoices.length;
         const overdue_amount_ttc = overdueInvoices.reduce(
-          (sum, inv) => sum + (inv.remaining_ttc ?? 0),
+          (sum, inv) => sum + (inv.remaining_due ?? 0),
           0,
         );
 

@@ -160,7 +160,7 @@ export function WeatherWidget({
       .from('weather_snapshot')
       .select('*')
       .eq('date', date)
-      .order('created_at', { ascending: false })
+      .order('fetched_at', { ascending: false })
       .limit(1);
 
     if (scheduleEventId) {
@@ -190,15 +190,14 @@ export function WeatherWidget({
       if (!daily) throw new Error('Données météo indisponibles');
 
       const idx = 0;
+      const weatherCode: number | null = daily.weathercode?.[idx] ?? null;
       const rawData: Omit<WeatherData, 'severity'> = {
         temp_min: daily.temperature_2m_min?.[idx] ?? null,
         temp_max: daily.temperature_2m_max?.[idx] ?? null,
         wind_speed: daily.windspeed_10m_max?.[idx] ?? null,
         precipitation_mm: daily.precipitation_sum?.[idx] ?? null,
-        weather_code: daily.weathercode?.[idx] ?? null,
-        weather_label: daily.weathercode?.[idx] !== undefined
-          ? getWeatherMeta(daily.weathercode[idx]).label
-          : null,
+        weather_code: weatherCode,
+        weather_label: weatherCode !== null ? getWeatherMeta(weatherCode).label : null,
       };
 
       const severity = calculateSeverity(rawData, eventType);
@@ -221,17 +220,18 @@ export function WeatherWidget({
       if (!forceRefresh) {
         const snapshot = await fetchFromDatabase();
         if (snapshot) {
+          const weatherMeta = getWeatherMeta(snapshot.weather_code);
           const data: WeatherData = {
-            temp_min: snapshot.temp_min,
-            temp_max: snapshot.temp_max,
-            wind_speed: snapshot.wind_speed,
+            temp_min: snapshot.temperature_min,
+            temp_max: snapshot.temperature_max,
+            wind_speed: snapshot.wind_speed_kmh,
             precipitation_mm: snapshot.precipitation_mm,
             weather_code: snapshot.weather_code,
-            weather_label: snapshot.weather_label,
+            weather_label: weatherMeta.label,
             severity: snapshot.severity,
           };
           setWeather(data);
-          setLastUpdated(snapshot.created_at);
+          setLastUpdated(snapshot.fetched_at);
           return;
         }
       }
@@ -245,12 +245,11 @@ export function WeatherWidget({
           const insertPayload: Record<string, unknown> = {
             company_id: companyId,
             date,
-            temp_min: apiData.temp_min,
-            temp_max: apiData.temp_max,
-            wind_speed: apiData.wind_speed,
+            temperature_min: apiData.temp_min,
+            temperature_max: apiData.temp_max,
+            wind_speed_kmh: apiData.wind_speed,
             precipitation_mm: apiData.precipitation_mm,
             weather_code: apiData.weather_code,
-            weather_label: apiData.weather_label,
             severity: apiData.severity,
           };
           if (siteAddressId) insertPayload.site_address_id = siteAddressId;
@@ -289,148 +288,84 @@ export function WeatherWidget({
             <Skeleton className="h-5 w-32" />
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Skeleton className="h-10 rounded-lg" />
-            <Skeleton className="h-10 rounded-lg" />
-            <Skeleton className="h-10 rounded-lg" />
+            <Skeleton className="h-12 rounded-lg" />
+            <Skeleton className="h-12 rounded-lg" />
+            <Skeleton className="h-12 rounded-lg" />
           </div>
-          <Skeleton className="h-6 w-24 rounded-full" />
         </CardContent>
       </Card>
     );
   }
 
-  if (error && !weather) {
-    if (compact) {
-      return (
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-yellow-500" />
-          <span className="text-xs text-muted-foreground">Météo indisponible</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={() => loadWeather(true)}
-          >
-            Réessayer
-          </Button>
-        </div>
-      );
-    }
+  if (error) {
     return (
-      <Card className="border border-yellow-500/20 bg-yellow-500/5">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              <div>
-                <p className="text-sm font-medium">Météo indisponible</p>
-                <p className="text-xs text-muted-foreground">{error}</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-[48px] min-w-[48px]"
-              onClick={() => loadWeather(true)}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Réessayer
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!weather) {
-    if (compact) {
-      return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <AlertTriangle className="h-4 w-4 text-orange-400" />
+        <span>{error}</span>
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 px-3 text-xs text-muted-foreground"
+          className="h-7 px-2 text-xs"
           onClick={() => loadWeather(true)}
+          disabled={refreshing}
         >
-          <Cloud className="h-3 w-3 mr-1" />
-          Mettre à jour la météo
+          <RefreshCw className={cn('h-3 w-3 mr-1', refreshing && 'animate-spin')} />
+          Réessayer
         </Button>
-      );
-    }
-    return (
-      <Card className="border border-white/10 bg-white/5">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cloud className="h-5 w-5 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Aucune donnée météo disponible</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-[48px]"
-              onClick={() => loadWeather(true)}
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Mettre à jour
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      </div>
     );
   }
+
+  if (!weather) return null;
 
   const meta = getWeatherMeta(weather.weather_code);
   const severityConfig = SEVERITY_CONFIG[weather.severity];
 
   if (compact) {
     return (
-      <TooltipProvider delayDuration={200}>
-        <div className="flex items-center gap-2 flex-wrap">
+      <TooltipProvider>
+        <div className="flex items-center gap-2">
+          <WeatherIcon type={meta.icon} className="h-4 w-4" />
+          <span className="text-sm text-muted-foreground">
+            {weather.temp_min !== null && weather.temp_max !== null
+              ? `${Math.round(weather.temp_min)}–${Math.round(weather.temp_max)}°C`
+              : meta.label}
+          </span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex items-center gap-1.5 cursor-default">
-                <WeatherIcon type={meta.icon} className="h-4 w-4" />
-                {weather.temp_max !== null && (
-                  <span className="text-sm font-medium">
-                    {Math.round(weather.temp_max)}°C
-                  </span>
-                )}
-                {weather.precipitation_mm !== null && weather.precipitation_mm > 0 && (
-                  <span className="text-xs text-blue-400">
-                    {weather.precipitation_mm.toFixed(1)}mm
-                  </span>
-                )}
-              </div>
+              <Badge
+                variant="outline"
+                className={cn('text-xs cursor-default', severityConfig.badgeClass)}
+              >
+                {severityConfig.label}
+              </Badge>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px]">
-              <div className="text-xs space-y-1">
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="space-y-1 text-xs">
                 <p className="font-medium">{meta.label}</p>
-                {weather.temp_min !== null && weather.temp_max !== null && (
-                  <p>Température : {Math.round(weather.temp_min)}° / {Math.round(weather.temp_max)}°C</p>
-                )}
                 {weather.precipitation_mm !== null && (
-                  <p>Précipitations : {weather.precipitation_mm.toFixed(1)} mm</p>
+                  <p>Précipitations : {weather.precipitation_mm} mm</p>
                 )}
                 {weather.wind_speed !== null && (
                   <p>Vent : {Math.round(weather.wind_speed)} km/h</p>
                 )}
+                {lastUpdated && (
+                  <p className="text-muted-foreground">
+                    Mis à jour : {new Date(lastUpdated).toLocaleString('fr-FR')}
+                  </p>
+                )}
               </div>
             </TooltipContent>
           </Tooltip>
-          <Badge
-            variant="outline"
-            className={cn('text-xs px-2 py-0.5 border font-medium', severityConfig.badgeClass)}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => loadWeather(true)}
+            disabled={refreshing}
           >
-            {weather.severity === 'alerte' && (
-              <AlertTriangle className="h-3 w-3 mr-1" />
-            )}
-            {severityConfig.label}
-          </Badge>
+            <RefreshCw className={cn('h-3 w-3', refreshing && 'animate-spin')} />
+          </Button>
         </div>
       </TooltipProvider>
     );
@@ -438,114 +373,72 @@ export function WeatherWidget({
 
   return (
     <Card className="border border-white/10 bg-white/5">
-      <CardContent className="p-4 space-y-4">
-        {/* Header */}
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <WeatherIcon type={meta.icon} className="h-6 w-6" />
-            <div>
-              <p className="text-sm font-medium">{meta.label}</p>
-              {lastUpdated && (
-                <p className="text-xs text-muted-foreground">
-                  Mis à jour le{' '}
-                  {new Date(lastUpdated).toLocaleDateString('fr-FR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
+            <span className="text-sm font-medium">{meta.label}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={cn('text-xs', severityConfig.badgeClass)}
+            >
+              {weather.severity === 'alerte' && (
+                <AlertTriangle className="h-3 w-3 mr-1" />
               )}
-            </div>
+              {severityConfig.label}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => loadWeather(true)}
+              disabled={refreshing}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="min-h-[48px] min-w-[48px] rounded-full"
-            onClick={() => loadWeather(true)}
-            disabled={refreshing}
-            aria-label="Actualiser la météo"
-          >
-            <RefreshCw
-              className={cn('h-4 w-4 text-muted-foreground', refreshing && 'animate-spin')}
-            />
-          </Button>
         </div>
 
-        {/* Metrics grid */}
         <div className="grid grid-cols-3 gap-3">
-          {/* Temperature */}
-          <div className="rounded-lg bg-white/5 border border-white/10 p-3 flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 rounded-lg bg-white/5 p-2">
             <Thermometer className="h-4 w-4 text-orange-400" />
-            <p className="text-xs text-muted-foreground text-center">Température</p>
-            {weather.temp_min !== null && weather.temp_max !== null ? (
-              <p className="text-sm font-semibold text-center">
-                {Math.round(weather.temp_min)}° / {Math.round(weather.temp_max)}°C
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
+            <span className="text-xs text-muted-foreground">Temp.</span>
+            <span className="text-sm font-semibold">
+              {weather.temp_min !== null && weather.temp_max !== null
+                ? `${Math.round(weather.temp_min)}–${Math.round(weather.temp_max)}°C`
+                : '–'}
+            </span>
           </div>
 
-          {/* Precipitation */}
-          <div className="rounded-lg bg-white/5 border border-white/10 p-3 flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 rounded-lg bg-white/5 p-2">
             <Droplets className="h-4 w-4 text-blue-400" />
-            <p className="text-xs text-muted-foreground text-center">Précipitations</p>
-            {weather.precipitation_mm !== null ? (
-              <p className="text-sm font-semibold text-center">
-                {weather.precipitation_mm.toFixed(1)} mm
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
+            <span className="text-xs text-muted-foreground">Précip.</span>
+            <span className="text-sm font-semibold">
+              {weather.precipitation_mm !== null
+                ? `${weather.precipitation_mm} mm`
+                : '–'}
+            </span>
           </div>
 
-          {/* Wind */}
-          <div className="rounded-lg bg-white/5 border border-white/10 p-3 flex flex-col items-center gap-1">
-            <Wind className="h-4 w-4 text-cyan-400" />
-            <p className="text-xs text-muted-foreground text-center">Vent</p>
-            {weather.wind_speed !== null ? (
-              <p className="text-sm font-semibold text-center">
-                {Math.round(weather.wind_speed)} km/h
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
+          <div className="flex flex-col items-center gap-1 rounded-lg bg-white/5 p-2">
+            <Wind className="h-4 w-4 text-gray-400" />
+            <span className="text-xs text-muted-foreground">Vent</span>
+            <span className="text-sm font-semibold">
+              {weather.wind_speed !== null
+                ? `${Math.round(weather.wind_speed)} km/h`
+                : '–'}
+            </span>
           </div>
         </div>
 
-        {/* Severity badge */}
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className={cn(
-              'inline-flex items-center gap-1 px-3 py-1 text-sm font-medium border',
-              severityConfig.badgeClass
-            )}
-          >
-            {weather.severity === 'alerte' && (
-              <AlertTriangle className="h-3.5 w-3.5" />
-            )}
-            {weather.severity === 'defavorable' && (
-              <AlertTriangle className="h-3.5 w-3.5" />
-            )}
-            Météo {severityConfig.label.toLowerCase()}
-          </Badge>
-
-          {eventType === 'chantier' && weather.severity === 'alerte' && (
-            <p className="text-xs text-red-400">
-              Intervention déconseillée
-            </p>
-          )}
-          {eventType === 'chantier' && weather.severity === 'defavorable' && (
-            <p className="text-xs text-orange-400">
-              Conditions difficiles prévues
-            </p>
-          )}
-        </div>
+        {lastUpdated && (
+          <p className="text-xs text-muted-foreground text-right">
+            Mis à jour : {new Date(lastUpdated).toLocaleString('fr-FR')}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
 }
-
-export default WeatherWidget;

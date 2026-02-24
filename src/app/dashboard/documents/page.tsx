@@ -39,7 +39,9 @@ type ClientSnippet = {
 
 type QuoteWithClient = QuoteRow & { client: ClientSnippet | null };
 type InvoiceWithClient = InvoiceRow & { client: ClientSnippet | null };
-type DepositWithClient = DepositInvoiceRow & { client: ClientSnippet | null };
+type DepositWithInvoice = DepositInvoiceRow & {
+  invoice: (InvoiceRow & { client: ClientSnippet | null }) | null;
+};
 type DeliveryWithClient = DeliveryNoteRow & { client: ClientSnippet | null };
 
 const QUOTE_STATUS_COLORS: Record<string, string> = {
@@ -117,7 +119,7 @@ export default function DocumentsPage() {
 
   const [quotes, setQuotes] = useState<QuoteWithClient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceWithClient[]>([]);
-  const [deposits, setDeposits] = useState<DepositWithClient[]>([]);
+  const [deposits, setDeposits] = useState<DepositWithInvoice[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryWithClient[]>([]);
 
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -180,8 +182,7 @@ export default function DocumentsPage() {
     setLoadingDeposits(true);
     try {
       let query = supabase
-        .from('deposit_invoice')
-        .select('*, client(id, company_name, first_name, last_name)')
+        .from('deposit_invoice').select('*, invoice(*, client(id, company_name, first_name, last_name))')')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
@@ -191,7 +192,7 @@ export default function DocumentsPage() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setDeposits((data as unknown as DepositWithClient[]) ?? []);
+      setDeposits((data as unknown as DepositWithInvoice[]) ?? []);
     } catch (err) {
       console.error('Erreur chargement acomptes:', err);
     } finally {
@@ -496,13 +497,13 @@ export default function DocumentsPage() {
                             onClick={() => handleRowClick('acomptes', deposit.id)}
                           >
                             <TableCell className="font-mono text-sm font-medium text-white">
-                              {deposit.reference ?? '—'}
+                              {deposit.invoice?.reference ?? '—'}
                             </TableCell>
                             <TableCell className="text-gray-300">
-                              {getClientName(deposit.client)}
+                              {getClientName(deposit.invoice?.client)}
                             </TableCell>
                             <TableCell className="hidden text-gray-400 sm:table-cell">
-                              {deposit.date_emission ? formatDate(deposit.date_emission) : '—'}
+                              {deposit.invoice?.date_emission ? formatDate(deposit.invoice?.date_emission) : '—'}
                             </TableCell>
                             <TableCell className="text-right font-medium text-white">
                               {deposit.amount_ttc != null ? formatCurrency(deposit.amount_ttc) : '—'}
@@ -512,10 +513,10 @@ export default function DocumentsPage() {
                                 variant="outline"
                                 className={cn(
                                   'border text-xs',
-                                  INVOICE_STATUS_COLORS[deposit.status] ?? 'bg-gray-500/20 text-gray-300'
+                                  INVOICE_STATUS_COLORS[deposit.invoice?.status] ?? 'bg-gray-500/20 text-gray-300'
                                 )}
                               >
-                                {INVOICE_STATUS_LABELS[deposit.status] ?? deposit.status}
+                                {INVOICE_STATUS_LABELS[deposit.invoice?.status] ?? deposit.invoice?.status}
                               </Badge>
                             </TableCell>
                             <TableCell>

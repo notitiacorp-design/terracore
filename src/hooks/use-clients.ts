@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { ClientRow, ClientInsert, ClientUpdate, ClientType } from '@/types/database';
 
@@ -22,7 +22,7 @@ export interface UseClientsReturn {
 }
 
 export function useClients(): UseClientsReturn {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -50,7 +50,7 @@ export function useClients(): UseClientsReturn {
 
         if (filters?.search && filters.search.trim().length > 0) {
           const term = `%${filters.search.trim()}%`;
-          query = query.or(`company_name.ilike.${term},email.ilike.${term}`);
+          query = query.ilike('company_name', term);
         }
 
         const { data, error: fetchError } = await query;
@@ -157,7 +157,7 @@ export function useClients(): UseClientsReturn {
           .from('client')
           .select('*')
           .eq('company_id', companyId)
-          .or(`company_name.ilike.${term},email.ilike.${term}`)
+          .ilike('company_name', term)
           .order('company_name', { ascending: true })
           .limit(20);
 

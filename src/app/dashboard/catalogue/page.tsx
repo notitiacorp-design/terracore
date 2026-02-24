@@ -65,31 +65,31 @@ import { toast } from 'sonner';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ItemWithFamily = ItemRow & { family_name?: string | null };
-type WorkUnitWithLines = WorkUnitRow & { lines?: (WorkUnitLineRow & { item_name?: string })[] };
+type WorkUnitWithLines = WorkUnitRow & { lines?: (WorkUnitLineRow & { item_label?: string })[] };
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
 const itemSchema = z.object({
-  name: z.string().min(1, 'Nom requis'),
+  label: z.string().min(1, 'Nom requis'),
   description: z.string().optional(),
   family_id: z.string().optional().nullable(),
   item_type: z.enum(['materiau', 'main_oeuvre', 'fourniture', 'location'] as const),
   unit: z.string().min(1, 'Unité requise'),
   purchase_price_ht: z.coerce.number().min(0, 'Prix achat invalide'),
-  coefficient: z.coerce.number().min(0, 'Coefficient invalide'),
-  tva_rate: z.coerce.number().min(0),
+  unit_price_ht: z.coerce.number().min(0, 'Prix vente invalide'),
+  vat_rate: z.coerce.number().min(0),
   is_active: z.boolean(),
 });
 
 type ItemFormData = z.infer<typeof itemSchema>;
 
 const workUnitSchema = z.object({
-  name: z.string().min(1, 'Nom requis'),
+  label: z.string().min(1, 'Nom requis'),
   description: z.string().optional(),
   unit: z.string().min(1, 'Unité requise'),
-  selling_price_ht: z.coerce.number().min(0),
-  tva_rate: z.coerce.number().min(0),
-  margin_target: z.coerce.number().min(0).max(100).optional().nullable(),
+  total_price_ht: z.coerce.number().min(0),
+  vat_rate: z.coerce.number().min(0),
+  margin_percent: z.coerce.number().min(0).max(100).optional().nullable(),
   is_active: z.boolean(),
 });
 
@@ -159,10 +159,11 @@ export default function CataloguePage() {
     const loadCompany = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      // FIX 1: user_profile PK 'id' references auth.users(id) — no auth_user_id column
       const { data } = await supabase
         .from('user_profile')
         .select('company_id')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .single();
       if (data) setCompanyId(data.company_id);
     };
@@ -187,11 +188,12 @@ export default function CataloguePage() {
   const loadItems = useCallback(async () => {
     if (!companyId) return;
     setItemsLoading(true);
+    // FIX 2: item table uses 'label' not 'name'; order by 'label'
     const { data, error } = await supabase
       .from('item')
       .select('*, item_family(name)')
       .eq('company_id', companyId)
-      .order('name', { ascending: true });
+      .order('label', { ascending: true });
     if (error) toast.error('Erreur chargement articles');
     else {
       setItems(
@@ -208,11 +210,12 @@ export default function CataloguePage() {
   const loadWorkUnits = useCallback(async () => {
     if (!companyId) return;
     setWorkUnitsLoading(true);
+    // FIX 6: work_unit uses 'label' not 'name'; order by 'label'
     const { data, error } = await supabase
       .from('work_unit')
       .select('*')
       .eq('company_id', companyId)
-      .order('name', { ascending: true });
+      .order('label', { ascending: true });
     if (error) toast.error('Erreur chargement ouvrages');
     else setWorkUnits((data ?? []).map((wu: WorkUnitRow) => ({ ...wu, lines: [] })));
     setWorkUnitsLoading(false);
@@ -229,9 +232,10 @@ export default function CataloguePage() {
   // ── Load work unit lines ──
   const loadWorkUnitLines = useCallback(
     async (workUnitId: string) => {
+      // FIX 8: item table uses 'label' not 'name'
       const { data, error } = await supabase
         .from('work_unit_line')
-        .select('*, item(name)')
+        .select('*, item(label)')
         .eq('work_unit_id', workUnitId);
       if (error) {
         toast.error('Erreur chargement lignes ouvrage');
@@ -242,7 +246,8 @@ export default function CataloguePage() {
           wu.id === workUnitId
             ? {
                 ...wu,
-                lines: (data ?? []).map((l: any) => ({ ...l, item_name: l.item?.name ?? '' })),
+                // FIX 9: use l.item?.label instead of l.item?.name
+                lines: (data ?? []).map((l: any) => ({ ...l, item_label: l.item?.label ?? '' })),
               }
             : wu
         )
@@ -253,9 +258,10 @@ export default function CataloguePage() {
 
   // ── Filtered items ──
   const filteredItems = items.filter((item) => {
+    // FIX 3 & 4: item.label not item.name
     const matchSearch =
       !itemSearch ||
-      item.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+      item.label.toLowerCase().includes(itemSearch.toLowerCase()) ||
       (item.description ?? '').toLowerCase().includes(itemSearch.toLowerCase());
     const matchFamily = itemFamilyFilter === 'all' || item.family_id === itemFamilyFilter;
     const matchType = itemTypeFilter === 'all' || item.item_type === itemTypeFilter;
@@ -404,56 +410,93 @@ export default function CataloguePage() {
       )}
 
       {/* ── DELETE ITEM CONFIRM ── */}
-      <DeleteConfirm
-        open={!!deletingItemId}
-        title="Supprimer l'article ?"
-        description="Cette action est irréversible. L'article sera définitivement supprimé."
-        onCancel={() => setDeletingItemId(null)}
-        onConfirm={async () => {
-          if (!deletingItemId) return;
-          const { error } = await supabase.from('item').delete().eq('id', deletingItemId);
-          if (error) toast.error('Erreur suppression article');
-          else { toast.success('Article supprimé'); loadItems(); }
-          setDeletingItemId(null);
-        }}
-      />
+      <AlertDialog open={!!deletingItemId} onOpenChange={(open) => { if (!open) setDeletingItemId(null); }}>
+        <AlertDialogContent className="bg-[#16213e] border border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l&apos;article ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60">
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={async () => {
+                if (!deletingItemId) return;
+                const supabaseClient = createClient();
+                const { error } = await supabaseClient.from('item').delete().eq('id', deletingItemId);
+                if (error) toast.error('Erreur suppression article');
+                else { toast.success('Article supprimé'); loadItems(); }
+                setDeletingItemId(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── DELETE WORK UNIT CONFIRM ── */}
-      <DeleteConfirm
-        open={!!deletingWorkUnitId}
-        title="Supprimer l'ouvrage ?"
-        description="Cette action est irréversible. L'ouvrage et ses lignes seront supprimés."
-        onCancel={() => setDeletingWorkUnitId(null)}
-        onConfirm={async () => {
-          if (!deletingWorkUnitId) return;
-          const { error } = await supabase.from('work_unit').delete().eq('id', deletingWorkUnitId);
-          if (error) toast.error('Erreur suppression ouvrage');
-          else { toast.success('Ouvrage supprimé'); loadWorkUnits(); }
-          setDeletingWorkUnitId(null);
-        }}
-      />
+      <AlertDialog open={!!deletingWorkUnitId} onOpenChange={(open) => { if (!open) setDeletingWorkUnitId(null); }}>
+        <AlertDialogContent className="bg-[#16213e] border border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l&apos;ouvrage ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60">
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={async () => {
+                if (!deletingWorkUnitId) return;
+                const supabaseClient = createClient();
+                const { error } = await supabaseClient.from('work_unit').delete().eq('id', deletingWorkUnitId);
+                if (error) toast.error('Erreur suppression ouvrage');
+                else { toast.success('Ouvrage supprimé'); loadWorkUnits(); }
+                setDeletingWorkUnitId(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── DELETE FAMILY CONFIRM ── */}
-      <DeleteConfirm
-        open={!!deletingFamilyId}
-        title="Supprimer la famille ?"
-        description="Cette action est irréversible. Les articles liés ne seront pas supprimés mais n'auront plus de famille."
-        onCancel={() => setDeletingFamilyId(null)}
-        onConfirm={async () => {
-          if (!deletingFamilyId) return;
-          const { error } = await supabase.from('item_family').delete().eq('id', deletingFamilyId);
-          if (error) toast.error('Erreur suppression famille');
-          else { toast.success('Famille supprimée'); loadFamilies(); }
-          setDeletingFamilyId(null);
-        }}
-      />
+      <AlertDialog open={!!deletingFamilyId} onOpenChange={(open) => { if (!open) setDeletingFamilyId(null); }}>
+        <AlertDialogContent className="bg-[#16213e] border border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la famille ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60">
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={async () => {
+                if (!deletingFamilyId) return;
+                const supabaseClient = createClient();
+                const { error } = await supabaseClient.from('item_family').delete().eq('id', deletingFamilyId);
+                if (error) toast.error('Erreur suppression famille');
+                else { toast.success('Famille supprimée'); loadFamilies(); }
+                setDeletingFamilyId(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTICLES TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ── ArticlesTab ───────────────────────────────────────────────────────────────
 
 interface ArticlesTabProps {
   items: ItemWithFamily[];
@@ -471,11 +514,12 @@ interface ArticlesTabProps {
   onNew: () => void;
   onEdit: (item: ItemWithFamily) => void;
   onDelete: (id: string) => void;
-  computeMargin: (p: number, s: number) => string;
+  computeMargin: (purchaseHt: number, sellingHt: number) => string;
 }
 
 function ArticlesTab({
   items,
+  allItems,
   families,
   loading,
   itemSearch,
@@ -494,211 +538,157 @@ function ArticlesTab({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          {/* Search */}
-          <div className="relative">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-1 gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <Input
-              placeholder="Rechercher un article…"
+              placeholder="Rechercher un article..."
               value={itemSearch}
               onChange={(e) => setItemSearch(e.target.value)}
-              className="pl-9 bg-[#16213e] border-white/20 text-white placeholder:text-white/40 min-h-[48px] w-full sm:w-64"
+              className="pl-9 bg-[#16213e] border-white/20 text-white placeholder:text-white/40 min-h-[44px]"
             />
           </div>
-          {/* Family filter */}
           <Select value={itemFamilyFilter} onValueChange={setItemFamilyFilter}>
-            <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px] w-full sm:w-44">
-              <SelectValue placeholder="Toutes les familles" />
+            <SelectTrigger className="w-[160px] bg-[#16213e] border-white/20 text-white min-h-[44px]">
+              <SelectValue placeholder="Famille" />
             </SelectTrigger>
-            <SelectContent className="bg-[#16213e] border-white/20 text-white">
-              <SelectItem value="all">Toutes les familles</SelectItem>
+            <SelectContent className="bg-[#16213e] border-white/20">
+              <SelectItem value="all" className="text-white">Toutes familles</SelectItem>
               {families.map((f) => (
-                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                <SelectItem key={f.id} value={f.id} className="text-white">{f.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {/* Type filter */}
           <Select value={itemTypeFilter} onValueChange={setItemTypeFilter}>
-            <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px] w-full sm:w-44">
-              <SelectValue placeholder="Tous les types" />
+            <SelectTrigger className="w-[160px] bg-[#16213e] border-white/20 text-white min-h-[44px]">
+              <SelectValue placeholder="Type" />
             </SelectTrigger>
-            <SelectContent className="bg-[#16213e] border-white/20 text-white">
-              <SelectItem value="all">Tous les types</SelectItem>
+            <SelectContent className="bg-[#16213e] border-white/20">
+              <SelectItem value="all" className="text-white">Tous types</SelectItem>
               {(Object.entries(ITEM_TYPE_LABELS) as [ItemType, string][]).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
+                <SelectItem key={k} value={k} className="text-white">{v}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {/* Active filter */}
           <Select
-            value={itemActiveFilter === 'all' ? 'all' : itemActiveFilter ? 'actif' : 'inactif'}
-            onValueChange={(v) => {
-              if (v === 'all') setItemActiveFilter('all');
-              else setItemActiveFilter(v === 'actif');
-            }}
+            value={itemActiveFilter === 'all' ? 'all' : itemActiveFilter ? 'active' : 'inactive'}
+            onValueChange={(v) => setItemActiveFilter(v === 'all' ? 'all' : v === 'active')}
           >
-            <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px] w-full sm:w-36">
-              <SelectValue />
+            <SelectTrigger className="w-[140px] bg-[#16213e] border-white/20 text-white min-h-[44px]">
+              <SelectValue placeholder="Statut" />
             </SelectTrigger>
-            <SelectContent className="bg-[#16213e] border-white/20 text-white">
-              <SelectItem value="all">Tous</SelectItem>
-              <SelectItem value="actif">Actifs</SelectItem>
-              <SelectItem value="inactif">Inactifs</SelectItem>
+            <SelectContent className="bg-[#16213e] border-white/20">
+              <SelectItem value="all" className="text-white">Tous</SelectItem>
+              <SelectItem value="active" className="text-white">Actifs</SelectItem>
+              <SelectItem value="inactive" className="text-white">Inactifs</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <Button
           onClick={onNew}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px] gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[44px] gap-2"
         >
           <Plus className="h-4 w-4" />
           Nouvel article
         </Button>
       </div>
 
-      {/* Count */}
-      <p className="text-sm text-white/50">{items.length} article{items.length !== 1 ? 's' : ''}</p>
-
       {/* Table */}
       <div className="rounded-lg border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#16213e] border-white/10 hover:bg-[#16213e]">
-                <TableHead className="text-white/60">Nom</TableHead>
-                <TableHead className="text-white/60">Famille</TableHead>
-                <TableHead className="text-white/60">Type</TableHead>
-                <TableHead className="text-white/60">Unité</TableHead>
-                <TableHead className="text-white/60 text-right">Prix achat HT</TableHead>
-                <TableHead className="text-white/60 text-right">Coeff.</TableHead>
-                <TableHead className="text-white/60 text-right">Prix vente HT</TableHead>
-                <TableHead className="text-white/60 text-right">TVA</TableHead>
-                <TableHead className="text-white/60 text-right">Marge</TableHead>
-                <TableHead className="text-white/60 text-center">Actif</TableHead>
-                <TableHead className="text-white/60 text-right">Actions</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/10 hover:bg-transparent">
+              <TableHead className="text-white/60">Libellé</TableHead>
+              <TableHead className="text-white/60">Type</TableHead>
+              <TableHead className="text-white/60">Famille</TableHead>
+              <TableHead className="text-white/60">Unité</TableHead>
+              <TableHead className="text-white/60 text-right">Prix achat HT</TableHead>
+              <TableHead className="text-white/60 text-right">Prix vente HT</TableHead>
+              <TableHead className="text-white/60 text-right">Marge</TableHead>
+              <TableHead className="text-white/60">Statut</TableHead>
+              <TableHead className="text-white/60 w-[80px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i} className="border-white/10">
+                  {Array.from({ length: 9 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full bg-white/10" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : items.length === 0 ? (
+              <TableRow className="border-white/10">
+                <TableCell colSpan={9} className="text-center text-white/40 py-12">
+                  Aucun article trouvé
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i} className="border-white/10">
-                    {Array.from({ length: 11 }).map((__, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 bg-white/10" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : items.length === 0 ? (
-                <TableRow className="border-white/10">
-                  <TableCell colSpan={11} className="text-center text-white/40 py-12">
-                    Aucun article trouvé
+            ) : (
+              items.map((item) => (
+                <TableRow key={item.id} className="border-white/10 hover:bg-white/5">
+                  {/* FIX: use item.label not item.name */}
+                  <TableCell className="text-white font-medium">{item.label}</TableCell>
+                  <TableCell>
+                    <Badge className={cn('text-xs', ITEM_TYPE_COLORS[item.item_type as ItemType])}>
+                      {ITEM_TYPE_LABELS[item.item_type as ItemType]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-white/70">{item.family_name ?? '—'}</TableCell>
+                  <TableCell className="text-white/70">{item.unit}</TableCell>
+                  <TableCell className="text-right text-white/70">
+                    {formatCurrency(item.purchase_price_ht ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-right text-white/70">
+                    {formatCurrency(item.unit_price_ht ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-right text-white/70">
+                    {computeMargin(item.purchase_price_ht ?? 0, item.unit_price_ht ?? 0)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={item.is_active ? 'bg-emerald-600/20 text-emerald-400' : 'bg-white/10 text-white/40'}>
+                      {item.is_active ? 'Actif' : 'Inactif'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
+                        onClick={() => onEdit(item)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
+                        onClick={() => onDelete(item.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : (
-                items.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className="border-white/10 hover:bg-white/5 cursor-pointer"
-                    onClick={() => onEdit(item)}
-                  >
-                    <TableCell className="font-medium text-white">
-                      <div>
-                        <div>{item.name}</div>
-                        {item.description && (
-                          <div className="text-xs text-white/40 truncate max-w-[200px]">{item.description}</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-white/70">{item.family_name ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge className={cn('text-xs', ITEM_TYPE_COLORS[item.item_type])}>
-                        {ITEM_TYPE_LABELS[item.item_type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-white/70">{item.unit}</TableCell>
-                    <TableCell className="text-right text-white/70">
-                      {formatCurrency(item.purchase_price_ht ?? 0)}
-                    </TableCell>
-                    <TableCell className="text-right text-white/70">{item.coefficient ?? '—'}</TableCell>
-                    <TableCell className="text-right text-white font-medium">
-                      {formatCurrency(item.selling_price_ht ?? 0)}
-                    </TableCell>
-                    <TableCell className="text-right text-white/70">{item.tva_rate}%</TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={cn(
-                          'text-sm font-medium',
-                          item.selling_price_ht && item.purchase_price_ht
-                            ? ((item.selling_price_ht - item.purchase_price_ht) / item.selling_price_ht) * 100 >= 30
-                              ? 'text-emerald-400'
-                              : ((item.selling_price_ht - item.purchase_price_ht) / item.selling_price_ht) * 100 >= 15
-                              ? 'text-yellow-400'
-                              : 'text-red-400'
-                            : 'text-white/40'
-                        )}
-                      >
-                        {computeMargin(item.purchase_price_ht ?? 0, item.selling_price_ht ?? 0)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-xs',
-                          item.is_active
-                            ? 'border-emerald-500 text-emerald-400'
-                            : 'border-white/20 text-white/40'
-                        )}
-                      >
-                        {item.is_active ? 'Actif' : 'Inactif'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div
-                        className="flex items-center justify-end gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
-                          onClick={() => onEdit(item)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
-                          onClick={() => onDelete(item.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OUVRAGES TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ── OuvragesTab ───────────────────────────────────────────────────────────────
 
 interface OuvragesTabProps {
   workUnits: WorkUnitWithLines[];
   loading: boolean;
   expandedWorkUnits: Set<string>;
   setExpandedWorkUnits: React.Dispatch<React.SetStateAction<Set<string>>>;
-  onLoadLines: (id: string) => void;
+  onLoadLines: (id: string) => Promise<void>;
   onNew: () => void;
   onEdit: (wu: WorkUnitWithLines) => void;
   onDelete: (id: string) => void;
@@ -714,26 +704,23 @@ function OuvragesTab({
   onEdit,
   onDelete,
 }: OuvragesTabProps) {
-  const toggleExpand = (id: string) => {
-    setExpandedWorkUnits((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        onLoadLines(id);
-      }
-      return next;
-    });
+  const toggleExpand = async (id: string) => {
+    const next = new Set(expandedWorkUnits);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+      await onLoadLines(id);
+    }
+    setExpandedWorkUnits(next);
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-white/50">{workUnits.length} ouvrage{workUnits.length !== 1 ? 's' : ''}</p>
+      <div className="flex justify-end">
         <Button
           onClick={onNew}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px] gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[44px] gap-2"
         >
           <Plus className="h-4 w-4" />
           Nouvel ouvrage
@@ -741,147 +728,128 @@ function OuvragesTab({
       </div>
 
       <div className="rounded-lg border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#16213e] border-white/10 hover:bg-[#16213e]">
-                <TableHead className="text-white/60 w-8"></TableHead>
-                <TableHead className="text-white/60">Nom</TableHead>
-                <TableHead className="text-white/60">Description</TableHead>
-                <TableHead className="text-white/60">Unité</TableHead>
-                <TableHead className="text-white/60 text-right">Prix vente HT</TableHead>
-                <TableHead className="text-white/60 text-right">TVA</TableHead>
-                <TableHead className="text-white/60 text-right">Marge cible</TableHead>
-                <TableHead className="text-white/60 text-center">Actif</TableHead>
-                <TableHead className="text-white/60 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <TableRow key={i} className="border-white/10">
-                    {Array.from({ length: 9 }).map((__, j) => (
-                      <TableCell key={j}><Skeleton className="h-4 bg-white/10" /></TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : workUnits.length === 0 ? (
-                <TableRow className="border-white/10">
-                  <TableCell colSpan={9} className="text-center text-white/40 py-12">
-                    Aucun ouvrage trouvé
-                  </TableCell>
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/10 hover:bg-transparent">
+              <TableHead className="text-white/60 w-[40px]"></TableHead>
+              <TableHead className="text-white/60">Libellé</TableHead>
+              <TableHead className="text-white/60">Unité</TableHead>
+              {/* FIX 5: use total_price_ht not selling_price_ht */}
+              <TableHead className="text-white/60 text-right">Prix HT</TableHead>
+              {/* FIX 5: use margin_percent not margin_target */}
+              <TableHead className="text-white/60 text-right">Marge %</TableHead>
+              <TableHead className="text-white/60">Statut</TableHead>
+              <TableHead className="text-white/60 w-[80px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <TableRow key={i} className="border-white/10">
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full bg-white/10" /></TableCell>
+                  ))}
                 </TableRow>
-              ) : (
-                workUnits.map((wu) => (
-                  <>
-                    <TableRow
-                      key={wu.id}
-                      className="border-white/10 hover:bg-white/5"
-                    >
-                      <TableCell>
+              ))
+            ) : workUnits.length === 0 ? (
+              <TableRow className="border-white/10">
+                <TableCell colSpan={7} className="text-center text-white/40 py-12">
+                  Aucun ouvrage trouvé
+                </TableCell>
+              </TableRow>
+            ) : (
+              workUnits.map((wu) => (
+                <>
+                  <TableRow key={wu.id} className="border-white/10 hover:bg-white/5">
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-white/60 hover:text-white"
+                        onClick={() => toggleExpand(wu.id)}
+                      >
+                        {expandedWorkUnits.has(wu.id)
+                          ? <ChevronDown className="h-4 w-4" />
+                          : <ChevronRight className="h-4 w-4" />}
+                      </Button>
+                    </TableCell>
+                    {/* FIX 6: wu.label not wu.name */}
+                    <TableCell className="text-white font-medium">{wu.label}</TableCell>
+                    <TableCell className="text-white/70">{wu.unit}</TableCell>
+                    {/* FIX 5: wu.total_price_ht not wu.selling_price_ht */}
+                    <TableCell className="text-right text-white/70">{formatCurrency(wu.total_price_ht ?? 0)}</TableCell>
+                    {/* FIX 5: wu.margin_percent not wu.margin_target */}
+                    <TableCell className="text-right text-white/70">
+                      {wu.margin_percent != null ? `${wu.margin_percent}%` : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={wu.is_active ? 'bg-emerald-600/20 text-emerald-400' : 'bg-white/10 text-white/40'}>
+                        {wu.is_active ? 'Actif' : 'Inactif'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-white/60 hover:text-white hover:bg-white/10"
-                          onClick={() => toggleExpand(wu.id)}
+                          className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
+                          onClick={() => onEdit(wu)}
                         >
-                          {expandedWorkUnits.has(wu.id) ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                      </TableCell>
-                      <TableCell className="font-medium text-white">{wu.name}</TableCell>
-                      <TableCell className="text-white/60 max-w-[200px] truncate">{wu.description ?? '—'}</TableCell>
-                      <TableCell className="text-white/70">{wu.unit}</TableCell>
-                      <TableCell className="text-right text-white font-medium">
-                        {formatCurrency(wu.selling_price_ht ?? 0)}
-                      </TableCell>
-                      <TableCell className="text-right text-white/70">{wu.tva_rate}%</TableCell>
-                      <TableCell className="text-right text-white/70">
-                        {wu.margin_target != null ? `${wu.margin_target}%` : '—'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-xs',
-                            wu.is_active
-                              ? 'border-emerald-500 text-emerald-400'
-                              : 'border-white/20 text-white/40'
-                          )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
+                          onClick={() => onDelete(wu.id)}
                         >
-                          {wu.is_active ? 'Actif' : 'Inactif'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
-                            onClick={() => onEdit(wu)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
-                            onClick={() => onDelete(wu.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {expandedWorkUnits.has(wu.id) && (
+                    <TableRow key={`${wu.id}-lines`} className="border-white/10 bg-white/3">
+                      <TableCell colSpan={7} className="py-2 px-8">
+                        {(wu.lines ?? []).length === 0 ? (
+                          <p className="text-white/40 text-sm py-2">Aucune ligne</p>
+                        ) : (
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-white/50">
+                                <th className="text-left font-normal py-1">Article</th>
+                                <th className="text-right font-normal py-1">Qté</th>
+                                <th className="text-right font-normal py-1">PU HT</th>
+                                <th className="text-right font-normal py-1">Total HT</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(wu.lines ?? []).map((line) => (
+                                <tr key={line.id} className="text-white/70">
+                                  {/* FIX 8+9: use item_label */}
+                                  <td className="py-1">{line.item_label || '—'}</td>
+                                  <td className="text-right py-1">{line.quantity}</td>
+                                  <td className="text-right py-1">{formatCurrency(line.unit_price_ht ?? 0)}</td>
+                                  <td className="text-right py-1">{formatCurrency((line.quantity ?? 0) * (line.unit_price_ht ?? 0))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
                       </TableCell>
                     </TableRow>
-                    {expandedWorkUnits.has(wu.id) && (
-                      <TableRow key={`${wu.id}-lines`} className="border-white/10 bg-[#16213e]/50">
-                        <TableCell colSpan={9} className="py-0">
-                          <div className="ml-8 py-3">
-                            {!wu.lines || wu.lines.length === 0 ? (
-                              <p className="text-sm text-white/40 italic">Aucune ligne de composition</p>
-                            ) : (
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Composition</p>
-                                <div className="grid grid-cols-4 gap-2 text-xs text-white/40 mb-1 px-2">
-                                  <span>Article</span>
-                                  <span className="text-right">Quantité</span>
-                                  <span>Unité</span>
-                                  <span></span>
-                                </div>
-                                {wu.lines.map((line) => (
-                                  <div
-                                    key={line.id}
-                                    className="grid grid-cols-4 gap-2 text-sm text-white/70 bg-white/5 rounded px-2 py-1.5"
-                                  >
-                                    <span>{line.item_name}</span>
-                                    <span className="text-right">{line.quantity}</span>
-                                    <span>{line.unit}</span>
-                                    <span></span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  )}
+                </>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FAMILLES TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ── FamillesTab ───────────────────────────────────────────────────────────────
 
 interface FamillesTabProps {
   families: ItemFamilyRow[];
@@ -895,87 +863,99 @@ function FamillesTab({ families, loading, onNew, onEdit, onDelete }: FamillesTab
   const roots = families.filter((f) => !f.parent_id);
   const children = (parentId: string) => families.filter((f) => f.parent_id === parentId);
 
-  const renderFamily = (family: ItemFamilyRow, depth = 0): React.ReactNode => (
-    <div key={family.id}>
-      <div
-        className={cn(
-          'flex items-center justify-between rounded-lg px-4 py-3 hover:bg-white/5 group min-h-[56px]',
-          depth > 0 && 'ml-6 border-l border-white/10'
-        )}
-      >
-        <div className="flex items-center gap-3">
-          <div className={cn('text-white/40', depth === 0 ? '' : 'ml-2')}>
-            {children(family.id).length > 0 ? (
-              <FolderOpen className="h-4 w-4" />
-            ) : (
-              <Folder className="h-4 w-4" />
-            )}
-          </div>
-          <div>
-            <span className="text-white font-medium">{family.name}</span>
-            {family.sort_order != null && (
-              <span className="ml-2 text-xs text-white/30">ordre: {family.sort_order}</span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
-            onClick={() => onEdit(family)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
-            onClick={() => onDelete(family.id)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-      {children(family.id).map((child) => renderFamily(child, depth + 1))}
-    </div>
-  );
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-white/50">{families.length} famille{families.length !== 1 ? 's' : ''}</p>
+      <div className="flex justify-end">
         <Button
           onClick={onNew}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px] gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[44px] gap-2"
         >
           <Plus className="h-4 w-4" />
           Nouvelle famille
         </Button>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-[#16213e]/50 p-4">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="mb-3">
-              <Skeleton className="h-12 bg-white/10 rounded-lg" />
-            </div>
-          ))
-        ) : families.length === 0 ? (
-          <div className="text-center text-white/40 py-12">
-            Aucune famille créée
-          </div>
-        ) : (
-          roots.map((f) => renderFamily(f))
-        )}
+      <div className="rounded-lg border border-white/10 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/10 hover:bg-transparent">
+              <TableHead className="text-white/60">Nom</TableHead>
+              <TableHead className="text-white/60">Parent</TableHead>
+              <TableHead className="text-white/60">Ordre</TableHead>
+              <TableHead className="text-white/60 w-[80px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i} className="border-white/10">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full bg-white/10" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : families.length === 0 ? (
+              <TableRow className="border-white/10">
+                <TableCell colSpan={4} className="text-center text-white/40 py-12">
+                  Aucune famille trouvée
+                </TableCell>
+              </TableRow>
+            ) : (
+              roots.map((root) => (
+                <>
+                  <TableRow key={root.id} className="border-white/10 hover:bg-white/5">
+                    <TableCell className="text-white font-medium">
+                      <div className="flex items-center gap-2">
+                        <Folder className="h-4 w-4 text-yellow-400" />
+                        {root.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-white/40">—</TableCell>
+                    <TableCell className="text-white/70">{root.sort_order ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10" onClick={() => onEdit(root)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10" onClick={() => onDelete(root.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {children(root.id).map((child) => (
+                    <TableRow key={child.id} className="border-white/10 hover:bg-white/5">
+                      <TableCell className="text-white/80">
+                        <div className="flex items-center gap-2 pl-6">
+                          <FolderOpen className="h-4 w-4 text-yellow-300/60" />
+                          {child.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-white/60">{root.name}</TableCell>
+                      <TableCell className="text-white/70">{child.sort_order ?? '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10" onClick={() => onEdit(child)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-400/10" onClick={() => onDelete(child.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ITEM DIALOG
-// ─────────────────────────────────────────────────────────────────────────────
+// ── ItemDialog ────────────────────────────────────────────────────────────────
 
 interface ItemDialogProps {
   open: boolean;
@@ -988,49 +968,41 @@ interface ItemDialogProps {
 
 function ItemDialog({ open, onClose, editingItem, families, companyId, onSaved }: ItemDialogProps) {
   const supabase = createClient();
-  const isEditing = !!editingItem;
+  const isEdit = !!editingItem;
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<ItemFormData>({
+  const { register, handleSubmit, control, formState: { errors, isSubmitting }, reset } = useForm<ItemFormData>({
     resolver: zodResolver(itemSchema),
     defaultValues: {
-      name: editingItem?.name ?? '',
+      label: editingItem?.label ?? '',
       description: editingItem?.description ?? '',
       family_id: editingItem?.family_id ?? null,
-      item_type: editingItem?.item_type ?? 'materiau',
+      item_type: (editingItem?.item_type as ItemType) ?? 'fourniture',
       unit: editingItem?.unit ?? '',
       purchase_price_ht: editingItem?.purchase_price_ht ?? 0,
-      coefficient: editingItem?.coefficient ?? 1,
-      tva_rate: editingItem?.tva_rate ?? 20,
+      unit_price_ht: editingItem?.unit_price_ht ?? 0,
+      vat_rate: editingItem?.vat_rate ?? 20,
       is_active: editingItem?.is_active ?? true,
     },
   });
 
-  const purchasePrice = watch('purchase_price_ht');
-  const coefficient = watch('coefficient');
-  const computedSellingPrice = (purchasePrice ?? 0) * (coefficient ?? 1);
-
   const onSubmit = async (data: ItemFormData) => {
     const payload = {
-      ...data,
-      selling_price_ht: computedSellingPrice,
-      company_id: companyId,
+      label: data.label,
+      description: data.description || null,
       family_id: data.family_id || null,
+      item_type: data.item_type,
+      unit: data.unit,
+      purchase_price_ht: data.purchase_price_ht,
+      unit_price_ht: data.unit_price_ht,
+      vat_rate: data.vat_rate,
+      is_active: data.is_active,
+      company_id: companyId,
     };
 
-    if (isEditing && editingItem) {
-      const { error } = await supabase
-        .from('item')
-        .update({ ...payload, updated_at: new Date().toISOString() })
-        .eq('id', editingItem.id);
-      if (error) { toast.error('Erreur mise à jour article'); return; }
-      toast.success('Article mis à jour');
+    if (isEdit && editingItem) {
+      const { error } = await supabase.from('item').update(payload).eq('id', editingItem.id);
+      if (error) { toast.error('Erreur modification article'); return; }
+      toast.success('Article modifié');
     } else {
       const { error } = await supabase.from('item').insert(payload);
       if (error) { toast.error('Erreur création article'); return; }
@@ -1040,171 +1012,99 @@ function ItemDialog({ open, onClose, editingItem, families, companyId, onSaved }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-[#16213e] border border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white">
-            {isEditing ? 'Modifier l\'article' : 'Nouvel article'}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? 'Modifier l\'article' : 'Nouvel article'}</DialogTitle>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-          {/* Name + Active */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label className="text-white/70">Nom *</Label>
-              <Input
-                {...register('name')}
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-                placeholder="Nom de l'article"
-              />
-              {errors.name && <p className="text-xs text-red-400">{errors.name.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Actif</Label>
-              <div className="flex items-center gap-2 min-h-[48px]">
-                <Controller
-                  name="is_active"
-                  control={control}
-                  render={({ field }) => (
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      className="data-[state=checked]:bg-emerald-600"
-                    />
-                  )}
-                />
-                <span className="text-sm text-white/60">{watch('is_active') ? 'Actif' : 'Inactif'}</span>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label className="text-white/80">Libellé *</Label>
+            <Input {...register('label')} className="bg-[#1a1a2e] border-white/20 text-white" />
+            {errors.label && <p className="text-red-400 text-xs">{errors.label.message}</p>}
           </div>
-
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label className="text-white/70">Description</Label>
-            <Input
-              {...register('description')}
-              className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              placeholder="Description optionnelle"
-            />
+          <div className="space-y-2">
+            <Label className="text-white/80">Description</Label>
+            <Input {...register('description')} className="bg-[#1a1a2e] border-white/20 text-white" />
           </div>
-
-          {/* Family + Type */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Famille</Label>
-              <Controller
-                name="family_id"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value ?? 'none'} onValueChange={(v) => field.onChange(v === 'none' ? null : v)}>
-                    <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px]">
-                      <SelectValue placeholder="Sans famille" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#16213e] border-white/20 text-white">
-                      <SelectItem value="none">Sans famille</SelectItem>
-                      {families.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Type *</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-white/80">Type *</Label>
               <Controller
                 name="item_type"
                 control={control}
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px]">
+                    <SelectTrigger className="bg-[#1a1a2e] border-white/20 text-white">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#16213e] border-white/20 text-white">
+                    <SelectContent className="bg-[#16213e] border-white/20">
                       {(Object.entries(ITEM_TYPE_LABELS) as [ItemType, string][]).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                        <SelectItem key={k} value={k} className="text-white">{v}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {errors.item_type && <p className="text-xs text-red-400">{errors.item_type.message}</p>}
             </div>
-          </div>
-
-          {/* Unit + TVA */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Unité *</Label>
-              <Input
-                {...register('unit')}
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-                placeholder="ex: m², u, ml, kg…"
-              />
-              {errors.unit && <p className="text-xs text-red-400">{errors.unit.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Taux TVA (%)</Label>
-              <Input
-                {...register('tva_rate')}
-                type="number"
-                step="0.1"
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
+            <div className="space-y-2">
+              <Label className="text-white/80">Famille</Label>
+              <Controller
+                name="family_id"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value ?? 'none'} onValueChange={(v) => field.onChange(v === 'none' ? null : v)}>
+                    <SelectTrigger className="bg-[#1a1a2e] border-white/20 text-white">
+                      <SelectValue placeholder="Aucune" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#16213e] border-white/20">
+                      <SelectItem value="none" className="text-white">Aucune</SelectItem>
+                      {families.map((f) => (
+                        <SelectItem key={f.id} value={f.id} className="text-white">{f.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
             </div>
           </div>
-
-          {/* Pricing */}
-          <div className="rounded-lg border border-white/10 p-4 bg-[#16213e]/50 space-y-3">
-            <p className="text-sm font-semibold text-white/70">Tarification</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-white/70">Prix achat HT (€)</Label>
-                <Input
-                  {...register('purchase_price_ht')}
-                  type="number"
-                  step="0.01"
-                  className="bg-[#1a1a2e] border-white/20 text-white min-h-[48px]"
-                />
-                {errors.purchase_price_ht && <p className="text-xs text-red-400">{errors.purchase_price_ht.message}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-white/70">Coefficient</Label>
-                <Input
-                  {...register('coefficient')}
-                  type="number"
-                  step="0.01"
-                  className="bg-[#1a1a2e] border-white/20 text-white min-h-[48px]"
-                />
-                {errors.coefficient && <p className="text-xs text-red-400">{errors.coefficient.message}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-white/70">Prix vente HT (calculé)</Label>
-                <div className="flex items-center min-h-[48px] px-3 rounded-md border border-emerald-500/30 bg-emerald-500/10">
-                  <span className="text-emerald-400 font-semibold">
-                    {formatCurrency(computedSellingPrice)}
-                  </span>
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-white/80">Unité *</Label>
+              <Input {...register('unit')} className="bg-[#1a1a2e] border-white/20 text-white" />
+              {errors.unit && <p className="text-red-400 text-xs">{errors.unit.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-white/80">TVA (%)</Label>
+              <Input {...register('vat_rate')} type="number" step="0.1" className="bg-[#1a1a2e] border-white/20 text-white" />
             </div>
           </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="border-white/20 text-white hover:bg-white/10 min-h-[48px]"
-            >
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-white/80">Prix achat HT</Label>
+              <Input {...register('purchase_price_ht')} type="number" step="0.01" className="bg-[#1a1a2e] border-white/20 text-white" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-white/80">Prix vente HT</Label>
+              <Input {...register('unit_price_ht')} type="number" step="0.01" className="bg-[#1a1a2e] border-white/20 text-white" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Controller
+              name="is_active"
+              control={control}
+              render={({ field }) => (
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              )}
+            />
+            <Label className="text-white/80">Article actif</Label>
+          </div>
+          <DialogFooter className="gap-2 mt-6">
+            <Button type="button" variant="outline" onClick={onClose} className="border-white/20 text-white hover:bg-white/10">
               Annuler
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px]"
-            >
-              {isSubmitting ? 'Enregistrement…' : isEditing ? 'Mettre à jour' : 'Créer l\'article'}
+            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {isSubmitting ? 'Enregistrement...' : isEdit ? 'Modifier' : 'Créer'}
             </Button>
           </DialogFooter>
         </form>
@@ -1213,9 +1113,7 @@ function ItemDialog({ open, onClose, editingItem, families, companyId, onSaved }
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WORK UNIT DIALOG
-// ─────────────────────────────────────────────────────────────────────────────
+// ── WorkUnitDialog ────────────────────────────────────────────────────────────
 
 interface WorkUnitDialogProps {
   open: boolean;
@@ -1227,41 +1125,40 @@ interface WorkUnitDialogProps {
 
 function WorkUnitDialog({ open, onClose, editingWorkUnit, companyId, onSaved }: WorkUnitDialogProps) {
   const supabase = createClient();
-  const isEditing = !!editingWorkUnit;
+  const isEdit = !!editingWorkUnit;
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<WorkUnitFormData>({
+  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<WorkUnitFormData>({
     resolver: zodResolver(workUnitSchema),
     defaultValues: {
-      name: editingWorkUnit?.name ?? '',
+      label: editingWorkUnit?.label ?? '',
       description: editingWorkUnit?.description ?? '',
       unit: editingWorkUnit?.unit ?? '',
-      selling_price_ht: editingWorkUnit?.selling_price_ht ?? 0,
-      tva_rate: editingWorkUnit?.tva_rate ?? 20,
-      margin_target: editingWorkUnit?.margin_target ?? null,
+      // FIX 5: use total_price_ht not selling_price_ht
+      total_price_ht: editingWorkUnit?.total_price_ht ?? 0,
+      vat_rate: editingWorkUnit?.vat_rate ?? 20,
+      // FIX 5: use margin_percent not margin_target
+      margin_percent: editingWorkUnit?.margin_percent ?? null,
       is_active: editingWorkUnit?.is_active ?? true,
     },
   });
 
   const onSubmit = async (data: WorkUnitFormData) => {
     const payload = {
-      ...data,
+      label: data.label,
+      description: data.description || null,
+      unit: data.unit,
+      // FIX 5: correct column names
+      total_price_ht: data.total_price_ht,
+      vat_rate: data.vat_rate,
+      margin_percent: data.margin_percent ?? null,
+      is_active: data.is_active,
       company_id: companyId,
-      margin_target: data.margin_target ?? null,
     };
 
-    if (isEditing && editingWorkUnit) {
-      const { error } = await supabase
-        .from('work_unit')
-        .update({ ...payload, updated_at: new Date().toISOString() })
-        .eq('id', editingWorkUnit.id);
-      if (error) { toast.error('Erreur mise à jour ouvrage'); return; }
-      toast.success('Ouvrage mis à jour');
+    if (isEdit && editingWorkUnit) {
+      const { error } = await supabase.from('work_unit').update(payload).eq('id', editingWorkUnit.id);
+      if (error) { toast.error('Erreur modification ouvrage'); return; }
+      toast.success('Ouvrage modifié');
     } else {
       const { error } = await supabase.from('work_unit').insert(payload);
       if (error) { toast.error('Erreur création ouvrage'); return; }
@@ -1271,118 +1168,60 @@ function WorkUnitDialog({ open, onClose, editingWorkUnit, companyId, onSaved }: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-xl">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-[#16213e] border border-white/10 text-white max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-white">
-            {isEditing ? 'Modifier l\'ouvrage' : 'Nouvel ouvrage'}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? 'Modifier l\'ouvrage' : 'Nouvel ouvrage'}</DialogTitle>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-          {/* Name + Active */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label className="text-white/70">Nom *</Label>
-              <Input
-                {...register('name')}
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-                placeholder="Nom de l'ouvrage"
-              />
-              {errors.name && <p className="text-xs text-red-400">{errors.name.message}</p>}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label className="text-white/80">Libellé *</Label>
+            <Input {...register('label')} className="bg-[#1a1a2e] border-white/20 text-white" />
+            {errors.label && <p className="text-red-400 text-xs">{errors.label.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-white/80">Description</Label>
+            <Input {...register('description')} className="bg-[#1a1a2e] border-white/20 text-white" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-white/80">Unité *</Label>
+              <Input {...register('unit')} className="bg-[#1a1a2e] border-white/20 text-white" />
+              {errors.unit && <p className="text-red-400 text-xs">{errors.unit.message}</p>}
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Actif</Label>
-              <div className="flex items-center gap-2 min-h-[48px]">
-                <Controller
-                  name="is_active"
-                  control={control}
-                  render={({ field }) => (
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      className="data-[state=checked]:bg-emerald-600"
-                    />
-                  )}
-                />
-                <span className="text-sm text-white/60">{watch('is_active') ? 'Actif' : 'Inactif'}</span>
-              </div>
+            <div className="space-y-2">
+              <Label className="text-white/80">TVA (%)</Label>
+              <Input {...register('vat_rate')} type="number" step="0.1" className="bg-[#1a1a2e] border-white/20 text-white" />
             </div>
           </div>
-
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label className="text-white/70">Description</Label>
-            <Input
-              {...register('description')}
-              className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              placeholder="Description de l'ouvrage"
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              {/* FIX 5: label and field name use total_price_ht */}
+              <Label className="text-white/80">Prix total HT</Label>
+              <Input {...register('total_price_ht')} type="number" step="0.01" className="bg-[#1a1a2e] border-white/20 text-white" />
+            </div>
+            <div className="space-y-2">
+              {/* FIX 5: label and field name use margin_percent */}
+              <Label className="text-white/80">Marge cible (%)</Label>
+              <Input {...register('margin_percent')} type="number" step="0.1" className="bg-[#1a1a2e] border-white/20 text-white" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Controller
+              name="is_active"
+              control={control}
+              render={({ field }) => (
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              )}
             />
+            <Label className="text-white/80">Ouvrage actif</Label>
           </div>
-
-          {/* Unit + TVA */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Unité *</Label>
-              <Input
-                {...register('unit')}
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-                placeholder="ex: m², u, ml…"
-              />
-              {errors.unit && <p className="text-xs text-red-400">{errors.unit.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Taux TVA (%)</Label>
-              <Input
-                {...register('tva_rate')}
-                type="number"
-                step="0.1"
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              />
-            </div>
-          </div>
-
-          {/* Pricing */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Prix vente HT (€)</Label>
-              <Input
-                {...register('selling_price_ht')}
-                type="number"
-                step="0.01"
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white/70">Marge cible (%)</Label>
-              <Input
-                {...register('margin_target')}
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
-                className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-                placeholder="ex: 35"
-              />
-              {errors.margin_target && <p className="text-xs text-red-400">{errors.margin_target.message}</p>}
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="border-white/20 text-white hover:bg-white/10 min-h-[48px]"
-            >
+          <DialogFooter className="gap-2 mt-6">
+            <Button type="button" variant="outline" onClick={onClose} className="border-white/20 text-white hover:bg-white/10">
               Annuler
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px]"
-            >
-              {isSubmitting ? 'Enregistrement…' : isEditing ? 'Mettre à jour' : 'Créer l\'ouvrage'}
+            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {isSubmitting ? 'Enregistrement...' : isEdit ? 'Modifier' : 'Créer'}
             </Button>
           </DialogFooter>
         </form>
@@ -1391,9 +1230,7 @@ function WorkUnitDialog({ open, onClose, editingWorkUnit, companyId, onSaved }: 
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FAMILY DIALOG
-// ─────────────────────────────────────────────────────────────────────────────
+// ── FamilyDialog ──────────────────────────────────────────────────────────────
 
 interface FamilyDialogProps {
   open: boolean;
@@ -1406,14 +1243,9 @@ interface FamilyDialogProps {
 
 function FamilyDialog({ open, onClose, editingFamily, families, companyId, onSaved }: FamilyDialogProps) {
   const supabase = createClient();
-  const isEditing = !!editingFamily;
+  const isEdit = !!editingFamily;
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors, isSubmitting },
-  } = useForm<FamilyFormData>({
+  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<FamilyFormData>({
     resolver: zodResolver(familySchema),
     defaultValues: {
       name: editingFamily?.name ?? '',
@@ -1421,8 +1253,6 @@ function FamilyDialog({ open, onClose, editingFamily, families, companyId, onSav
       sort_order: editingFamily?.sort_order ?? 0,
     },
   });
-
-  const availableParents = families.filter((f) => f.id !== editingFamily?.id);
 
   const onSubmit = async (data: FamilyFormData) => {
     const payload = {
@@ -1432,13 +1262,10 @@ function FamilyDialog({ open, onClose, editingFamily, families, companyId, onSav
       company_id: companyId,
     };
 
-    if (isEditing && editingFamily) {
-      const { error } = await supabase
-        .from('item_family')
-        .update(payload)
-        .eq('id', editingFamily.id);
-      if (error) { toast.error('Erreur mise à jour famille'); return; }
-      toast.success('Famille mise à jour');
+    if (isEdit && editingFamily) {
+      const { error } = await supabase.from('item_family').update(payload).eq('id', editingFamily.id);
+      if (error) { toast.error('Erreur modification famille'); return; }
+      toast.success('Famille modifiée');
     } else {
       const { error } = await supabase.from('item_family').insert(payload);
       if (error) { toast.error('Erreur création famille'); return; }
@@ -1447,115 +1274,54 @@ function FamilyDialog({ open, onClose, editingFamily, families, companyId, onSav
     onSaved();
   };
 
+  const availableParents = families.filter((f) => f.id !== editingFamily?.id && !f.parent_id);
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-md">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-[#16213e] border border-white/10 text-white max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-white">
-            {isEditing ? 'Modifier la famille' : 'Nouvelle famille'}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? 'Modifier la famille' : 'Nouvelle famille'}</DialogTitle>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-          <div className="space-y-1.5">
-            <Label className="text-white/70">Nom *</Label>
-            <Input
-              {...register('name')}
-              className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              placeholder="Nom de la famille"
-            />
-            {errors.name && <p className="text-xs text-red-400">{errors.name.message}</p>}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label className="text-white/80">Nom *</Label>
+            <Input {...register('name')} className="bg-[#1a1a2e] border-white/20 text-white" />
+            {errors.name && <p className="text-red-400 text-xs">{errors.name.message}</p>}
           </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-white/70">Famille parente</Label>
+          <div className="space-y-2">
+            <Label className="text-white/80">Famille parente</Label>
             <Controller
               name="parent_id"
               control={control}
               render={({ field }) => (
                 <Select value={field.value ?? 'none'} onValueChange={(v) => field.onChange(v === 'none' ? null : v)}>
-                  <SelectTrigger className="bg-[#16213e] border-white/20 text-white min-h-[48px]">
-                    <SelectValue placeholder="Aucune (racine)" />
+                  <SelectTrigger className="bg-[#1a1a2e] border-white/20 text-white">
+                    <SelectValue placeholder="Aucune" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#16213e] border-white/20 text-white">
-                    <SelectItem value="none">Aucune (racine)</SelectItem>
+                  <SelectContent className="bg-[#16213e] border-white/20">
+                    <SelectItem value="none" className="text-white">Aucune (racine)</SelectItem>
                     {availableParents.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                      <SelectItem key={f.id} value={f.id} className="text-white">{f.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             />
           </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-white/70">Ordre d'affichage</Label>
-            <Input
-              {...register('sort_order')}
-              type="number"
-              className="bg-[#16213e] border-white/20 text-white min-h-[48px]"
-              placeholder="0"
-            />
+          <div className="space-y-2">
+            <Label className="text-white/80">Ordre d&apos;affichage</Label>
+            <Input {...register('sort_order')} type="number" className="bg-[#1a1a2e] border-white/20 text-white" />
           </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="border-white/20 text-white hover:bg-white/10 min-h-[48px]"
-            >
+          <DialogFooter className="gap-2 mt-6">
+            <Button type="button" variant="outline" onClick={onClose} className="border-white/20 text-white hover:bg-white/10">
               Annuler
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-h-[48px]"
-            >
-              {isSubmitting ? 'Enregistrement…' : isEditing ? 'Mettre à jour' : 'Créer la famille'}
+            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {isSubmitting ? 'Enregistrement...' : isEdit ? 'Modifier' : 'Créer'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE CONFIRM
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface DeleteConfirmProps {
-  open: boolean;
-  title: string;
-  description: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
-
-function DeleteConfirm({ open, title, description, onCancel, onConfirm }: DeleteConfirmProps) {
-  return (
-    <AlertDialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
-      <AlertDialogContent className="bg-[#1a1a2e] border-white/10 text-white">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-white">{title}</AlertDialogTitle>
-          <AlertDialogDescription className="text-white/60">{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            onClick={onCancel}
-            className="border-white/20 text-white hover:bg-white/10 bg-transparent min-h-[48px]"
-          >
-            Annuler
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            className="bg-red-600 hover:bg-red-700 text-white min-h-[48px]"
-          >
-            Supprimer
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }

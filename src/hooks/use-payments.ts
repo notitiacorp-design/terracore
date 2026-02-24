@@ -37,7 +37,7 @@ export interface UsePaymentsState {
 export interface UsePaymentsReturn extends UsePaymentsState {
   fetchPayments: (companyId: string, filters?: PaymentFilters) => Promise<PaymentRow[]>;
   createPayment: (data: PaymentInsert) => Promise<PaymentRow>;
-  fetchPaymentLinks: (companyId: string) => Promise<PaymentLinkRow[]>;
+  fetchPaymentLinks: (invoiceId: string) => Promise<PaymentLinkRow[]>;
   createPaymentLink: (data: PaymentLinkInsert) => Promise<PaymentLinkRow>;
   fetchInvoicePaymentSummary: (invoiceId: string) => Promise<InvoicePaymentSummary>;
   clearError: () => void;
@@ -157,9 +157,10 @@ export function usePayments(): UsePaymentsReturn {
 
   // -------------------------------------------------------------------------
   // fetchPaymentLinks
+  // Scoped to an invoice (payment_link has no company_id column)
   // -------------------------------------------------------------------------
   const fetchPaymentLinks = useCallback(
-    async (companyId: string): Promise<PaymentLinkRow[]> => {
+    async (invoiceId: string): Promise<PaymentLinkRow[]> => {
       setIsLoading(true);
       setError(null);
 
@@ -167,7 +168,7 @@ export function usePayments(): UsePaymentsReturn {
         const { data, error: supabaseError } = await supabase
           .from('payment_link')
           .select('*')
-          .eq('company_id', companyId)
+          .eq('invoice_id', invoiceId)
           .order('created_at', { ascending: false });
 
         if (supabaseError) {
@@ -196,6 +197,8 @@ export function usePayments(): UsePaymentsReturn {
 
   // -------------------------------------------------------------------------
   // createPaymentLink
+  // Only insert columns that exist in payment_link table:
+  // amount, expires_at, invoice_id, is_used, stripe_session_id, token
   // -------------------------------------------------------------------------
   const createPaymentLink = useCallback(
     async (data: PaymentLinkInsert): Promise<PaymentLinkRow> => {
@@ -203,9 +206,28 @@ export function usePayments(): UsePaymentsReturn {
       setError(null);
 
       try {
+        // Strip any company_id field that may be present on the insert type
+        // to avoid inserting a non-existent column
+        const { amount, expires_at, invoice_id, is_used, stripe_session_id, token } = data as PaymentLinkInsert & {
+          amount?: number | null;
+          expires_at?: string | null;
+          invoice_id?: string | null;
+          is_used?: boolean | null;
+          stripe_session_id?: string | null;
+          token?: string | null;
+        };
+
+        const sanitizedData: Partial<PaymentLinkInsert> = {};
+        if (amount !== undefined) sanitizedData.amount = amount;
+        if (expires_at !== undefined) sanitizedData.expires_at = expires_at;
+        if (invoice_id !== undefined) sanitizedData.invoice_id = invoice_id;
+        if (is_used !== undefined) sanitizedData.is_used = is_used;
+        if (stripe_session_id !== undefined) sanitizedData.stripe_session_id = stripe_session_id;
+        if (token !== undefined) sanitizedData.token = token;
+
         const { data: created, error: supabaseError } = await supabase
           .from('payment_link')
-          .insert(data)
+          .insert(sanitizedData)
           .select('*')
           .single();
 

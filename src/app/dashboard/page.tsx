@@ -254,10 +254,11 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // FIX #1: user_profile.id = auth.users.id, NOT auth_user_id
       const { data: profile } = await supabase
         .from('user_profile')
         .select('company_id, first_name, last_name')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (!profile?.company_id) return;
@@ -274,8 +275,8 @@ export default function DashboardPage() {
       monthStart.setHours(0, 0, 0, 0);
       const prevMonthStart = new Date(monthStart);
       prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
-      const prevMonthEnd = new Date(monthStart);
-      prevMonthEnd.setMilliseconds(-1);
+      // FIX #5: Use getTime() - 1 for clean last-millisecond-of-previous-month
+      const prevMonthEnd = new Date(monthStart.getTime() - 1);
 
       const [invoicesMonth, invoicesPrevMonth, quotesEnCours, invoicesImpayees, eventsToday] =
         await Promise.all([
@@ -297,9 +298,10 @@ export default function DashboardPage() {
             .select('total_ttc')
             .eq('company_id', cid)
             .in('status', ['envoye', 'brouillon']),
+          // FIX #2: Use 'remaining_due' instead of 'remaining_ttc'
           supabase
             .from('invoice')
-            .select('remaining_ttc')
+            .select('remaining_due')
             .eq('company_id', cid)
             .in('status', ['envoyee', 'en_retard', 'partiellement_payee']),
           supabase
@@ -314,7 +316,8 @@ export default function DashboardPage() {
       const caMonth = (invoicesMonth.data || []).reduce((s, r) => s + (r.total_ttc || 0), 0);
       const caPrev = (invoicesPrevMonth.data || []).reduce((s, r) => s + (r.total_ttc || 0), 0);
       const devisMontant = (quotesEnCours.data || []).reduce((s, r) => s + (r.total_ttc || 0), 0);
-      const facturesMontant = (invoicesImpayees.data || []).reduce((s, r) => s + (r.remaining_ttc || 0), 0);
+      // FIX #3: Use r.remaining_due instead of r.remaining_ttc
+      const facturesMontant = (invoicesImpayees.data || []).reduce((s, r) => s + (r.remaining_due || 0), 0);
 
       setKpis({
         ca_month: caMonth,
@@ -380,7 +383,7 @@ export default function DashboardPage() {
         .select('*, client:client_id(first_name, last_name, company_name)')
         .eq('company_id', cid)
         .eq('status', 'en_retard')
-        .order('date_echeance', { ascending: true })
+        .order('date_due', { ascending: true })
         .limit(10);
 
       const retards = (retardsRaw || []).map((inv: any) => ({
@@ -393,28 +396,27 @@ export default function DashboardPage() {
       // 3. Relances à envoyer
       const { data: relancesRaw } = await supabase
         .from('reminder_workflow')
-        .select('*, invoice:invoice_id(reference), client:client_id(first_name, last_name, company_name)')
+        .select('*, invoice:invoice_id(reference, client:client_id(first_name, last_name, company_name))')
         .eq('company_id', cid)
         .eq('is_active', true)
-        .lte('next_reminder_at', nowISO)
-        .order('next_reminder_at', { ascending: true })
+        .order('last_action_at', { ascending: true })
         .limit(10);
 
       const relances = (relancesRaw || []).map((rw: any) => ({
         ...rw,
         invoice_ref: rw.invoice?.reference,
-        client_name: rw.client
-          ? rw.client.company_name || `${rw.client.first_name || ''} ${rw.client.last_name || ''}`.trim()
+        client_name: rw.invoice?.client
+          ? rw.invoice.client.company_name || `${rw.invoice.client.first_name || ''} ${rw.invoice.client.last_name || ''}`.trim()
           : undefined,
       }));
 
-      // 4. Devis en attente
+      // 4. Devis en attente de signature
       const { data: docsRaw } = await supabase
         .from('quote')
         .select('*, client:client_id(first_name, last_name, company_name)')
         .eq('company_id', cid)
         .eq('status', 'envoye')
-        .order('date_emission', { ascending: true })
+        .order('date_validity', { ascending: true })
         .limit(10);
 
       const docsEnAttente = (docsRaw || []).map((q: any) => ({
@@ -424,60 +426,69 @@ export default function DashboardPage() {
           : undefined,
       }));
 
-      // 5. Trous de planning (jours de la semaine sans événements)
+      // 5. Trous de planning cette semaine
       const { data: weekEvents } = await supabase
         .from('schedule_event')
         .select('start_datetime')
         .eq('company_id', cid)
+        .eq('event_type', 'chantier')
         .gte('start_datetime', weekDays[0] + 'T00:00:00')
-        .lte('start_datetime', weekDays[4] + 'T23:59:59');
+        .lte('start_datetime', weekDays[weekDays.length - 1] + 'T23:59:59');
 
       const daysWithEvents = new Set(
-        (weekEvents || []).map((ev: any) => ev.start_datetime.split('T')[0])
+        (weekEvents || []).map((e) => e.start_datetime.split('T')[0])
       );
-      const trous = weekDays.filter((d) => !daysWithEvents.has(d) && d >= todayISO);
+      const trousPlanning = weekDays.filter((d) => !daysWithEvents.has(d));
 
       setDigest({
         chantiers_today: chantiersWithWeather,
         retards,
         relances,
         docs_en_attente: docsEnAttente,
-        trous_planning: trous,
+        trous_planning: trousPlanning,
       });
 
-      // ── AI Suggestions ────────────────────────────────────────────────────
-      const { data: proposals } = await supabase
+      // ── AI Suggestions ─────────────────────────────────────────────────────
+      const { data: aiRaw } = await supabase
         .from('ai_proposal')
         .select('*, agent_run:agent_run_id(agent_type)')
         .eq('company_id', cid)
-        .eq('status', 'pending')
+        .is('accepted_at', null)
+        .is('dismissed_at', null)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      setAiSuggestions(
-        (proposals || []).map((p: any) => ({
-          ...p,
-          agent_label: getAgentLabel(p.agent_run?.agent_type),
-        }))
-      );
+      const aiProposals: AiSuggestion[] = (aiRaw || []).map((p: any) => ({
+        ...p,
+        agent_label: getAgentLabel(p.agent_run?.agent_type),
+      }));
+      setAiSuggestions(aiProposals);
 
-      // ── Activity ──────────────────────────────────────────────────────────
-      const { data: logs } = await supabase
+      // ── Activity Feed ──────────────────────────────────────────────────────
+      // FIX #6: Do NOT select 'user_name' from audit_log; join user_profile via user_id
+      const { data: auditRaw } = await supabase
         .from('audit_log')
-        .select('id, action, entity_type, entity_id, created_at, user_id')
+        .select('id, action, entity_type, entity_id, created_at, user_id, user_profile:user_id(first_name, last_name)')
         .eq('company_id', cid)
         .order('created_at', { ascending: false })
-        .limit(8);
+        .limit(20);
 
-      setActivity(
-        (logs || []).map((l: any) => ({
-          id: l.id,
-          action: l.action,
-          entity_type: l.entity_type,
-          entity_id: l.entity_id,
-          created_at: l.created_at,
-        }))
-      );
+      const activityEntries: ActivityEntry[] = (auditRaw || []).map((log: any) => {
+        const profile = log.user_profile;
+        const user_name = profile
+          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || undefined
+          : undefined;
+        return {
+          id: log.id,
+          action: log.action,
+          entity_type: log.entity_type,
+          entity_id: log.entity_id,
+          created_at: log.created_at,
+          user_name,
+        };
+      });
+      setActivity(activityEntries);
+
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -495,588 +506,556 @@ export default function DashboardPage() {
     loadDashboard();
   };
 
-  const caEvolution = kpis.ca_prev_month > 0
+  const caGrowth = kpis.ca_prev_month > 0
     ? ((kpis.ca_month - kpis.ca_prev_month) / kpis.ca_prev_month) * 100
-    : 0;
-
-  const totalAlerts =
-    digest.retards.length +
-    digest.relances.length +
-    digest.docs_en_attente.length +
-    digest.trous_planning.length;
-
-  // ─── Render ─────────────────────────────────────────────────────────────────
+    : kpis.ca_month > 0 ? 100 : 0;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="p-6 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-xl bg-white/10" />
+            <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
-        <Skeleton className="h-64 rounded-xl bg-white/10" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Skeleton className="h-48 rounded-xl bg-white/10" />
-          <Skeleton className="h-48 rounded-xl bg-white/10" />
+        <Skeleton className="h-64 rounded-xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 rounded-xl" />
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] text-white">
-      <div className="mx-auto max-w-7xl p-4 pb-20 space-y-6">
-
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white lg:text-2xl">Tableau de bord</h1>
-            <p className="text-sm text-white/50">
-              {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 text-white/60 hover:text-white hover:bg-white/10"
-              onClick={handleRefresh}
-              disabled={refreshing}
-            >
-              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-            </Button>
-          </div>
+    <div className="p-6 space-y-6 max-w-screen-2xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Tableau de bord</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
         </div>
-
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {/* CA du mois */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs text-white/50 truncate">CA ce mois</p>
-                  <p className="mt-1 text-lg font-bold truncate">{formatCurrency(kpis.ca_month)}</p>
-                  <div className={cn(
-                    'mt-1 flex items-center gap-1 text-xs',
-                    caEvolution >= 0 ? 'text-emerald-400' : 'text-red-400'
-                  )}>
-                    <TrendingUp className="h-3 w-3" />
-                    <span>{caEvolution >= 0 ? '+' : ''}{caEvolution.toFixed(1)}%</span>
-                  </div>
-                </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20">
-                  <Euro className="h-5 w-5 text-emerald-400" />
-                </div>
-              </div>
-              {sparklineData.length > 0 && (
-                <div className="mt-3 h-12">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sparklineData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="caGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#10b981"
-                        strokeWidth={1.5}
-                        fill="url(#caGradient)"
-                        dot={false}
-                      />
-                      <Tooltip
-                        contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
-                        formatter={(v: number) => [formatCurrency(v), 'CA']}
-                        labelFormatter={(l) => l}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Devis en cours */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs text-white/50 truncate">Devis en cours</p>
-                  <p className="mt-1 text-lg font-bold">{kpis.devis_en_cours}</p>
-                  <p className="mt-1 text-xs text-white/40 truncate">{formatCurrency(kpis.devis_montant)}</p>
-                </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/20">
-                  <FileText className="h-5 w-5 text-blue-400" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Factures impayées */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs text-white/50 truncate">Factures impayées</p>
-                  <p className="mt-1 text-lg font-bold">{kpis.factures_impayees}</p>
-                  <p className="mt-1 text-xs text-red-400 truncate">{formatCurrency(kpis.factures_montant)}</p>
-                </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/20">
-                  <AlertTriangle className="h-5 w-5 text-red-400" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Interventions aujourd'hui */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs text-white/50 truncate">Chantiers aujourd'hui</p>
-                  <p className="mt-1 text-lg font-bold">{kpis.interventions_today}</p>
-                  <p className="mt-1 text-xs text-white/40">planifiés</p>
-                </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/20">
-                  <Briefcase className="h-5 w-5 text-purple-400" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="border-white/10 text-gray-300 hover:text-white"
+          >
+            <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
+            Actualiser
+          </Button>
+          {/* FIX #7: Route must start with /dashboard/ */}
+          <Button
+            size="sm"
+            onClick={() => router.push('/dashboard/documents/devis/nouveau')}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nouveau devis
+          </Button>
         </div>
+      </div>
 
-        {/* ── Morning Digest ── */}
-        <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5">
-          <CardHeader className="pb-3 pt-4 px-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20">
-                  <Zap className="h-4 w-4 text-emerald-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-base font-semibold text-white">Briefing du jour</CardTitle>
-                  <p className="text-xs text-white/50">Résumé par l'Agent IA Chef de Bureau</p>
-                </div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* CA du mois */}
+        <Card className="bg-[#1a1f2e] border-white/10">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">CA du mois</p>
+                <p className="text-2xl font-bold text-white mt-1">{formatCurrency(kpis.ca_month)}</p>
+                <p className={cn(
+                  'text-xs mt-1',
+                  caGrowth >= 0 ? 'text-emerald-400' : 'text-red-400'
+                )}>
+                  {caGrowth >= 0 ? '+' : ''}{caGrowth.toFixed(1)}% vs mois dernier
+                </p>
               </div>
-              {totalAlerts > 0 && (
-                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
-                  {totalAlerts} action{totalAlerts > 1 ? 's' : ''}
-                </Badge>
-              )}
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <Euro className="h-5 w-5 text-emerald-400" />
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-3">
-
-            {/* 1. Chantiers du jour */}
-            <Collapsible open={openChantiers} onOpenChange={setOpenChantiers}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-3 text-left hover:bg-white/10 transition-colors min-h-[48px]">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-medium text-white">Chantiers du jour</span>
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-                    {digest.chantiers_today.length}
-                  </Badge>
-                </div>
-                {openChantiers ? (
-                  <ChevronUp className="h-4 w-4 text-white/40" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-white/40" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 space-y-2">
-                  {digest.chantiers_today.length === 0 ? (
-                    <p className="px-3 py-2 text-sm text-white/40">Aucun chantier planifié aujourd'hui</p>
-                  ) : (
-                    digest.chantiers_today.map((ev) => (
-                      <div
-                        key={ev.id}
-                        className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-3 cursor-pointer hover:bg-white/10 transition-colors"
-                        onClick={() => router.push(`/planning/${ev.id}`)}
-                      >
-                        <div className="mt-0.5">{getWeatherIcon(ev.weather?.severity)}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-white truncate">{ev.title}</span>
-                            {ev.weather && (
-                              <span className={cn(
-                                'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs',
-                                getWeatherBadgeVariant(ev.weather.severity)
-                              )}>
-                                {getWeatherIcon(ev.weather.severity)}
-                                {getWeatherLabel(ev.weather.severity)}
-                              </span>
-                            )}
-                          </div>
-                          {ev.client_name && (
-                            <p className="text-xs text-white/50 mt-0.5">{ev.client_name}</p>
-                          )}
-                          <p className="text-xs text-white/40 mt-0.5">
-                            {formatTimeFromISO(ev.start_datetime)} – {formatTimeFromISO(ev.end_datetime)}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-3 w-3 text-white/20 shrink-0 mt-1" />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* 2. Retards */}
-            <Collapsible open={openRetards} onOpenChange={setOpenRetards}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-3 text-left hover:bg-white/10 transition-colors min-h-[48px]">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-red-400" />
-                  <span className="text-sm font-medium text-white">Retards de paiement</span>
-                  {digest.retards.length > 0 && (
-                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
-                      {digest.retards.length}
-                    </Badge>
-                  )}
-                </div>
-                {openRetards ? (
-                  <ChevronUp className="h-4 w-4 text-white/40" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-white/40" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 space-y-2">
-                  {digest.retards.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm text-white/40">Aucune facture en retard</p>
-                    </div>
-                  ) : (
-                    digest.retards.map((inv) => (
-                      <div
-                        key={inv.id}
-                        className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-3 cursor-pointer hover:bg-white/10 transition-colors"
-                        onClick={() => router.push(`/facturation/${inv.id}`)}
-                      >
-                        <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-white">{inv.reference}</span>
-                            <span className={cn(
-                              'rounded-full border px-2 py-0.5 text-xs',
-                              getInvoiceStatusBadge(inv.status)
-                            )}>En retard</span>
-                          </div>
-                          {inv.client_name && (
-                            <p className="text-xs text-white/50">{inv.client_name}</p>
-                          )}
-                          <p className="text-xs text-red-400">
-                            Échéance: {inv.date_echeance ? formatDate(inv.date_echeance) : '—'} · {formatCurrency(inv.remaining_ttc || 0)}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-3 w-3 text-white/20 shrink-0" />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* 3. Relances à envoyer */}
-            <Collapsible open={openRelances} onOpenChange={setOpenRelances}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-3 text-left hover:bg-white/10 transition-colors min-h-[48px]">
-                <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-orange-400" />
-                  <span className="text-sm font-medium text-white">Relances à envoyer</span>
-                  {digest.relances.length > 0 && (
-                    <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
-                      {digest.relances.length}
-                    </Badge>
-                  )}
-                </div>
-                {openRelances ? (
-                  <ChevronUp className="h-4 w-4 text-white/40" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-white/40" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 space-y-2">
-                  {digest.relances.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm text-white/40">Aucune relance à envoyer</p>
-                    </div>
-                  ) : (
-                    digest.relances.map((rw) => (
-                      <div
-                        key={rw.id}
-                        className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-3 cursor-pointer hover:bg-white/10 transition-colors"
-                        onClick={() => router.push(`/relances`)}
-                      >
-                        <Bell className="h-4 w-4 text-orange-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {rw.invoice_ref && (
-                              <span className="text-sm font-medium text-white">{rw.invoice_ref}</span>
-                            )}
-                            <span className="rounded-full border bg-orange-500/20 text-orange-400 border-orange-500/30 px-2 py-0.5 text-xs">
-                              {getReminderLevelLabel(rw.current_level)}
-                            </span>
-                          </div>
-                          {rw.client_name && (
-                            <p className="text-xs text-white/50">{rw.client_name}</p>
-                          )}
-                          {rw.next_reminder_at && (
-                            <p className="text-xs text-orange-400">
-                              Prévue: {formatDate(rw.next_reminder_at)}
-                            </p>
-                          )}
-                        </div>
-                        <ArrowRight className="h-3 w-3 text-white/20 shrink-0" />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* 4. Documents en attente */}
-            <Collapsible open={openDocs} onOpenChange={setOpenDocs}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-3 text-left hover:bg-white/10 transition-colors min-h-[48px]">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-yellow-400" />
-                  <span className="text-sm font-medium text-white">Devis en attente de réponse</span>
-                  {digest.docs_en_attente.length > 0 && (
-                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-                      {digest.docs_en_attente.length}
-                    </Badge>
-                  )}
-                </div>
-                {openDocs ? (
-                  <ChevronUp className="h-4 w-4 text-white/40" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-white/40" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 space-y-2">
-                  {digest.docs_en_attente.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm text-white/40">Aucun devis en attente</p>
-                    </div>
-                  ) : (
-                    digest.docs_en_attente.map((q) => (
-                      <div
-                        key={q.id}
-                        className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-3 cursor-pointer hover:bg-white/10 transition-colors"
-                        onClick={() => router.push(`/devis/${q.id}`)}
-                      >
-                        <FileText className="h-4 w-4 text-yellow-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-white">{q.reference}</span>
-                            <span className="rounded-full border bg-yellow-500/20 text-yellow-400 border-yellow-500/30 px-2 py-0.5 text-xs">
-                              {getQuoteStatusLabel(q.status)}
-                            </span>
-                          </div>
-                          {q.client_name && (
-                            <p className="text-xs text-white/50">{q.client_name}</p>
-                          )}
-                          <p className="text-xs text-white/40">
-                            Envoyé le {q.date_emission ? formatDate(q.date_emission) : '—'} · {formatCurrency(q.total_ttc || 0)}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-3 w-3 text-white/20 shrink-0" />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* 5. Trous de planning */}
-            <Collapsible open={openTrous} onOpenChange={setOpenTrous}>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-3 text-left hover:bg-white/10 transition-colors min-h-[48px]">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-purple-400" />
-                  <span className="text-sm font-medium text-white">Trous de planning cette semaine</span>
-                  {digest.trous_planning.length > 0 && (
-                    <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
-                      {digest.trous_planning.length} jour{digest.trous_planning.length > 1 ? 's' : ''}
-                    </Badge>
-                  )}
-                </div>
-                {openTrous ? (
-                  <ChevronUp className="h-4 w-4 text-white/40" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-white/40" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2">
-                  {digest.trous_planning.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm text-white/40">Planning bien rempli cette semaine</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 px-1 py-1">
-                      {digest.trous_planning.map((day) => (
-                        <button
-                          key={day}
-                          className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs text-purple-300 hover:bg-purple-500/20 transition-colors min-h-[48px] flex items-center"
-                          onClick={() => router.push(`/planning?date=${day}`)}
-                        >
-                          {formatDayFR(day)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
+            {sparklineData.length > 0 && (
+              <div className="mt-3 h-12">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparklineData}>
+                    <defs>
+                      <linearGradient id="caGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#10b981"
+                      strokeWidth={1.5}
+                      fill="url(#caGradient)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* ── Bottom Grid ── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Devis en cours */}
+        <Card className="bg-[#1a1f2e] border-white/10">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Devis en cours</p>
+                <p className="text-2xl font-bold text-white mt-1">{kpis.devis_en_cours}</p>
+                <p className="text-xs text-gray-400 mt-1">{formatCurrency(kpis.devis_montant)} potentiels</p>
+              </div>
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <FileText className="h-5 w-5 text-blue-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* Factures impayées */}
+        <Card className="bg-[#1a1f2e] border-white/10">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Factures impayées</p>
+                <p className="text-2xl font-bold text-white mt-1">{kpis.factures_impayees}</p>
+                <p className="text-xs text-red-400 mt-1">{formatCurrency(kpis.factures_montant)} en attente</p>
+              </div>
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Interventions aujourd'hui */}
+        <Card className="bg-[#1a1f2e] border-white/10">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Interventions aujourd'hui</p>
+                <p className="text-2xl font-bold text-white mt-1">{kpis.interventions_today}</p>
+                <p className="text-xs text-gray-400 mt-1">chantiers planifiés</p>
+              </div>
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Calendar className="h-5 w-5 text-purple-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-2">
+        {/* FIX #7: Route /dashboard/documents/devis/nouveau */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/dashboard/documents/devis/nouveau')}
+          className="border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
+        >
+          <Plus className="h-4 w-4 mr-1.5" />
+          Nouveau devis
+        </Button>
+        {/* FIX #8: Route /dashboard/clients/nouveau */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/dashboard/clients/nouveau')}
+          className="border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
+        >
+          <UserPlus className="h-4 w-4 mr-1.5" />
+          Nouveau client
+        </Button>
+        {/* FIX #9: Route /dashboard/documents/devis-ia */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/dashboard/documents/devis-ia')}
+          className="border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
+        >
+          <Sparkles className="h-4 w-4 mr-1.5" />
+          Devis IA
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/dashboard/planning')}
+          className="border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
+        >
+          <Calendar className="h-4 w-4 mr-1.5" />
+          Planning
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Morning Digest */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Chantiers du jour */}
+          <Collapsible open={openChantiers} onOpenChange={setOpenChantiers}>
+            <Card className="bg-[#1a1f2e] border-white/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors py-3 px-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Briefcase className="h-4 w-4 text-blue-400" />
+                      Chantiers du jour
+                      <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">
+                        {digest.chantiers_today.length}
+                      </Badge>
+                    </CardTitle>
+                    {openChantiers ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 px-5 pb-4">
+                  {digest.chantiers_today.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Aucun chantier prévu aujourd'hui.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {digest.chantiers_today.map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/planning`)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{ev.title}</p>
+                            {ev.client_name && (
+                              <p className="text-xs text-gray-400">{ev.client_name}</p>
+                            )}
+                            <p className="text-xs text-gray-500">
+                              {formatTimeFromISO(ev.start_datetime)}
+                              {ev.end_datetime ? ` – ${formatTimeFromISO(ev.end_datetime)}` : ''}
+                            </p>
+                          </div>
+                          {ev.weather && (
+                            <div className="flex items-center gap-1.5 ml-3">
+                              {getWeatherIcon(ev.weather.severity)}
+                              <span className={cn(
+                                'text-xs px-1.5 py-0.5 rounded border',
+                                getWeatherBadgeVariant(ev.weather.severity)
+                              )}>
+                                {getWeatherLabel(ev.weather.severity)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Retards */}
+          <Collapsible open={openRetards} onOpenChange={setOpenRetards}>
+            <Card className="bg-[#1a1f2e] border-white/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors py-3 px-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-400" />
+                      Factures en retard
+                      <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                        {digest.retards.length}
+                      </Badge>
+                    </CardTitle>
+                    {openRetards ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 px-5 pb-4">
+                  {digest.retards.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Aucune facture en retard.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {digest.retards.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/documents/factures/${inv.id}`)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{inv.reference}</p>
+                            {(inv as any).client_name && (
+                              <p className="text-xs text-gray-400">{(inv as any).client_name}</p>
+                            )}
+                            {inv.date_due && (
+                              <p className="text-xs text-red-400">Échéance : {formatDate(inv.date_due)}</p>
+                            )}
+                          </div>
+                          <div className="text-right ml-3">
+                            <p className="text-sm font-semibold text-red-400">{formatCurrency(inv.remaining_due || 0)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Relances */}
+          <Collapsible open={openRelances} onOpenChange={setOpenRelances}>
+            <Card className="bg-[#1a1f2e] border-white/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors py-3 px-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Bell className="h-4 w-4 text-orange-400" />
+                      Relances actives
+                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
+                        {digest.relances.length}
+                      </Badge>
+                    </CardTitle>
+                    {openRelances ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 px-5 pb-4">
+                  {digest.relances.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Aucune relance active.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {digest.relances.map((rw) => (
+                        <div
+                          key={rw.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/documents/factures/${rw.invoice_id}`)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">
+                              {(rw as any).invoice_ref || rw.invoice_id}
+                            </p>
+                            {(rw as any).client_name && (
+                              <p className="text-xs text-gray-400">{(rw as any).client_name}</p>
+                            )}
+                          </div>
+                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs ml-3">
+                            {getReminderLevelLabel(rw.current_level)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Devis en attente */}
+          <Collapsible open={openDocs} onOpenChange={setOpenDocs}>
+            <Card className="bg-[#1a1f2e] border-white/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors py-3 px-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-yellow-400" />
+                      Devis en attente de signature
+                      <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+                        {digest.docs_en_attente.length}
+                      </Badge>
+                    </CardTitle>
+                    {openDocs ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 px-5 pb-4">
+                  {digest.docs_en_attente.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Aucun devis en attente.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {digest.docs_en_attente.map((q) => (
+                        <div
+                          key={q.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/documents/devis/${q.id}`)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{q.reference}</p>
+                            {(q as any).client_name && (
+                              <p className="text-xs text-gray-400">{(q as any).client_name}</p>
+                            )}
+                            {q.date_validity && (
+                              <p className="text-xs text-gray-500">Valide jusqu'au {formatDate(q.date_validity)}</p>
+                            )}
+                          </div>
+                          <div className="text-right ml-3">
+                            <p className="text-sm font-semibold text-white">{formatCurrency(q.total_ttc || 0)}</p>
+                            <p className="text-xs text-gray-400">{getQuoteStatusLabel(q.status)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Trous de planning */}
+          <Collapsible open={openTrous} onOpenChange={setOpenTrous}>
+            <Card className="bg-[#1a1f2e] border-white/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors py-3 px-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      Trous de planning cette semaine
+                      <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs">
+                        {digest.trous_planning.length}
+                      </Badge>
+                    </CardTitle>
+                    {openTrous ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 px-5 pb-4">
+                  {digest.trous_planning.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">Planning complet cette semaine.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {digest.trous_planning.map((d) => (
+                        <Badge
+                          key={d}
+                          className="bg-gray-500/20 text-gray-300 border-gray-500/30 text-xs cursor-pointer hover:bg-gray-500/30"
+                          onClick={() => router.push('/dashboard/planning')}
+                        >
+                          {formatDayFR(d)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        </div>
+
+        {/* Right column: AI + Activity */}
+        <div className="space-y-4">
           {/* AI Suggestions */}
-          <Card className="bg-white/5 border-white/10">
-            <CardHeader className="pb-2 pt-4 px-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20">
-                  <Sparkles className="h-4 w-4 text-emerald-400" />
-                </div>
-                <CardTitle className="text-sm font-semibold text-white">Suggestions IA</CardTitle>
+          <Card className="bg-[#1a1f2e] border-white/10">
+            <CardHeader className="py-3 px-5">
+              <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                <Zap className="h-4 w-4 text-purple-400" />
+                Suggestions IA
                 {aiSuggestions.length > 0 && (
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs ml-auto">
+                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
                     {aiSuggestions.length}
                   </Badge>
                 )}
-              </div>
+              </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4">
+            <CardContent className="pt-0 px-5 pb-4">
               {aiSuggestions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Sparkles className="h-8 w-8 text-white/20 mb-2" />
-                  <p className="text-sm text-white/40">Aucune suggestion en attente</p>
-                </div>
+                <p className="text-sm text-gray-500">Aucune suggestion pour le moment.</p>
               ) : (
-                <ScrollArea className="max-h-64">
-                  <div className="space-y-3">
-                    {aiSuggestions.map((s) => (
-                      <div
-                        key={s.id}
-                        className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 cursor-pointer hover:bg-emerald-500/10 transition-colors"
-                        onClick={() => router.push(`/ia/propositions/${s.id}`)}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Sparkles className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-white truncate">{s.title}</p>
-                              {s.confidence_score != null && (
-                                <span className="text-xs text-emerald-400 shrink-0">
-                                  {Math.round((s.confidence_score as number) * 100)}%
-                                </span>
-                              )}
-                            </div>
-                            {s.description && (
-                              <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{s.description}</p>
-                            )}
-                            <p className="text-xs text-emerald-500/70 mt-1">{s.agent_label}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Activity Timeline */}
-          <Card className="bg-white/5 border-white/10">
-            <CardHeader className="pb-2 pt-4 px-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/20">
-                  <Activity className="h-4 w-4 text-blue-400" />
-                </div>
-                <CardTitle className="text-sm font-semibold text-white">Activité récente</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              {activity.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Activity className="h-8 w-8 text-white/20 mb-2" />
-                  <p className="text-sm text-white/40">Aucune activité récente</p>
-                </div>
-              ) : (
-                <ScrollArea className="max-h-64">
-                  <div className="space-y-1">
-                    {activity.map((entry, idx) => (
-                      <div key={entry.id} className="flex items-start gap-3 py-2">
-                        <div className="relative flex flex-col items-center">
-                          <div className="h-2 w-2 rounded-full bg-white/30 mt-1.5" />
-                          {idx < activity.length - 1 && (
-                            <div className="w-px flex-1 bg-white/10 mt-1" style={{ minHeight: 20 }} />
+                <div className="space-y-3">
+                  {aiSuggestions.map((s) => (
+                    <div key={s.id} className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-purple-300">{s.agent_label}</p>
+                          <p className="text-sm text-white mt-0.5">{s.title}</p>
+                          {s.description && (
+                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{s.description}</p>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0 pb-1">
-                          <p className="text-sm text-white/80">
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          className="h-6 text-xs bg-purple-600 hover:bg-purple-700 px-2"
+                          onClick={async () => {
+                            await supabase
+                              .from('ai_proposal')
+                              .update({ accepted_at: new Date().toISOString(), is_accepted: true })
+                              .eq('id', s.id);
+                            setAiSuggestions((prev) => prev.filter((p) => p.id !== s.id));
+                          }}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Accepter
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-xs text-gray-400 hover:text-white px-2"
+                          onClick={async () => {
+                            await supabase
+                              .from('ai_proposal')
+                              .update({ dismissed_at: new Date().toISOString() })
+                              .eq('id', s.id);
+                            setAiSuggestions((prev) => prev.filter((p) => p.id !== s.id));
+                          }}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Ignorer
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Activity Feed */}
+          <Card className="bg-[#1a1f2e] border-white/10">
+            <CardHeader className="py-3 px-5">
+              <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                <Activity className="h-4 w-4 text-blue-400" />
+                Activité récente
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 px-5 pb-4">
+              <ScrollArea className="h-64">
+                {activity.length === 0 ? (
+                  <p className="text-sm text-gray-500">Aucune activité récente.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {activity.map((entry) => (
+                      <div key={entry.id} className="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0">
+                        <div className="mt-0.5 p-1 rounded bg-blue-500/10">
+                          <Activity className="h-3 w-3 text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white">
                             <span className="font-medium">{getActionLabel(entry.action)}</span>
-                            {' · '}
-                            <span className="text-white/50">{getEntityLabel(entry.entity_type)}</span>
+                            {' '}{getEntityLabel(entry.entity_type)}
                           </p>
-                          <p className="text-xs text-white/30">
-                            {new Date(entry.created_at).toLocaleString('fr-FR', {
-                              day: '2-digit', month: '2-digit',
-                              hour: '2-digit', minute: '2-digit',
-                            })}
-                          </p>
+                          {entry.user_name && (
+                            <p className="text-xs text-gray-500">par {entry.user_name}</p>
+                          )}
+                          <p className="text-xs text-gray-600">{formatDate(entry.created_at)}</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                </ScrollArea>
-              )}
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
-
-        {/* ── Quick Actions ── */}
-        <div className="grid grid-cols-3 gap-3">
-          <Button
-            className="min-h-[56px] flex-col gap-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:text-white h-auto py-3"
-            variant="outline"
-            onClick={() => router.push('/devis/nouveau')}
-          >
-            <Plus className="h-5 w-5" />
-            <span className="text-xs font-medium">Nouveau devis</span>
-          </Button>
-          <Button
-            className="min-h-[56px] flex-col gap-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:text-white h-auto py-3"
-            variant="outline"
-            onClick={() => router.push('/clients/nouveau')}
-          >
-            <UserPlus className="h-5 w-5" />
-            <span className="text-xs font-medium">Nouveau client</span>
-          </Button>
-          <Button
-            className="min-h-[56px] flex-col gap-1.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300 h-auto py-3"
-            variant="outline"
-            onClick={() => router.push('/devis/assistant-ia')}
-          >
-            <Sparkles className="h-5 w-5" />
-            <span className="text-xs font-medium">Devis IA</span>
-          </Button>
-        </div>
-
       </div>
     </div>
   );

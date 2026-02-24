@@ -283,27 +283,82 @@ export async function fetchMarginByMonth(
 ): Promise<MarginByMonth[]> {
   const supabase = createClient();
 
-  const { data, error } = await supabase
+  // margin_percent does not exist on quote; fetch quotes and their lines with work_unit margin
+  const { data: quotes, error: quoteError } = await supabase
     .from('quote')
-    .select('date_emission, margin_percent')
+    .select('id, date_emission')
     .eq('company_id', companyId)
     .in('status', ['accepte', 'envoye', 'brouillon'])
     .gte('date_emission', `${year}-01-01`)
     .lte('date_emission', `${year}-12-31`);
 
-  if (error) throw new Error(`fetchMarginByMonth: ${error.message}`);
+  if (quoteError) throw new Error(`fetchMarginByMonth (quotes): ${quoteError.message}`);
 
   const map = new Map<number, { sum: number; count: number }>();
   for (let m = 1; m <= 12; m++) {
     map.set(m, { sum: 0, count: 0 });
   }
 
-  for (const row of data ?? []) {
-    if (row.margin_percent == null) continue;
-    const m = new Date(row.date_emission).getMonth() + 1;
+  if (!quotes || quotes.length === 0) {
+    return Array.from(map.entries()).map(([month, { sum, count }]) => ({
+      month,
+      label: monthLabel(month),
+      avg_margin_percent: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
+      quote_count: count,
+    }));
+  }
+
+  const quoteIds = quotes.map((q) => q.id);
+
+  const { data: lines, error: lineError } = await supabase
+    .from('quote_line')
+    .select('quote_id, work_unit_id')
+    .in('quote_id', quoteIds)
+    .not('work_unit_id', 'is', null);
+
+  if (lineError) throw new Error(`fetchMarginByMonth (quote_lines): ${lineError.message}`);
+
+  const workUnitIds = [
+    ...new Set((lines ?? []).map((l) => l.work_unit_id).filter(Boolean) as string[]),
+  ];
+
+  let workUnitMarginMap = new Map<string, number>();
+
+  if (workUnitIds.length > 0) {
+    const { data: workUnits, error: wuError } = await supabase
+      .from('work_unit')
+      .select('id, margin_percent')
+      .in('id', workUnitIds);
+
+    if (wuError) throw new Error(`fetchMarginByMonth (work_units): ${wuError.message}`);
+
+    workUnitMarginMap = new Map(
+      (workUnits ?? []).map((wu) => [wu.id, wu.margin_percent ?? 0]),
+    );
+  }
+
+  // Build a map of quote_id -> avg margin from its lines
+  const quoteMarginMap = new Map<string, { sum: number; count: number }>();
+  for (const line of lines ?? []) {
+    if (!line.work_unit_id) continue;
+    const margin = workUnitMarginMap.get(line.work_unit_id) ?? 0;
+    const existing = quoteMarginMap.get(line.quote_id);
+    if (existing) {
+      existing.sum += margin;
+      existing.count += 1;
+    } else {
+      quoteMarginMap.set(line.quote_id, { sum: margin, count: 1 });
+    }
+  }
+
+  for (const quote of quotes) {
+    const marginData = quoteMarginMap.get(quote.id);
+    if (!marginData || marginData.count === 0) continue;
+    const avgMargin = marginData.sum / marginData.count;
+    const m = new Date(quote.date_emission).getMonth() + 1;
     const entry = map.get(m);
     if (entry) {
-      entry.sum += row.margin_percent;
+      entry.sum += avgMargin;
       entry.count += 1;
     }
   }
@@ -325,11 +380,11 @@ export async function fetchOverdueInvoices(
   const { data, error } = await supabase
     .from('invoice')
     .select(
-      'id, reference, client_id, date_emission, date_echeance, total_ttc, remaining_ttc',
+      'id, reference, client_id, date_emission, date_due, total_ttc, remaining_due',
     )
     .eq('company_id', companyId)
     .eq('status', 'en_retard')
-    .order('date_echeance', { ascending: true });
+    .order('date_due', { ascending: true });
 
   if (error) throw new Error(`fetchOverdueInvoices: ${error.message}`);
 
@@ -340,11 +395,11 @@ export async function fetchOverdueInvoices(
     reference: row.reference,
     client_id: row.client_id,
     date_emission: row.date_emission,
-    date_echeance: row.date_echeance,
+    date_echeance: row.date_due,
     total_ttc: row.total_ttc ?? 0,
-    remaining_ttc: row.remaining_ttc ?? 0,
-    days_overdue: row.date_echeance
-      ? Math.max(0, daysBetween(row.date_echeance, today))
+    remaining_ttc: row.remaining_due ?? 0,
+    days_overdue: row.date_due
+      ? Math.max(0, daysBetween(row.date_due, today))
       : 0,
   }));
 }
@@ -374,7 +429,8 @@ export async function fetchPendingProposals(
     .from('ai_proposal')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
-    .eq('status', 'pending');
+    .eq('is_accepted', false)
+    .is('dismissed_at', null);
 
   if (error) throw new Error(`fetchPendingProposals: ${error.message}`);
 

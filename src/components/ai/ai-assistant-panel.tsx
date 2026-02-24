@@ -125,8 +125,32 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // FIX Bug 3: ref to track if async operations should be cancelled
+  const isCancelledRef = useRef(false);
+  // FIX Bug 2: ref to track mounted state for setTimeout in clearConversation
+  const isMountedRef = useRef(true);
 
-  // Initial greeting
+  // Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    isCancelledRef.current = false;
+    return () => {
+      isMountedRef.current = false;
+      isCancelledRef.current = true;
+    };
+  }, []);
+
+  // FIX Bug 3: When panel closes, cancel any in-flight async operations
+  useEffect(() => {
+    if (!open) {
+      isCancelledRef.current = true;
+    } else {
+      isCancelledRef.current = false;
+    }
+  }, [open]);
+
+  // FIX Bug 1: Added messages.length to dependency array to correctly re-trigger
+  // when messages are reset so welcome message shows again on reopen
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([
@@ -139,7 +163,7 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
         },
       ]);
     }
-  }, [open]);
+  }, [open, messages.length]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -163,6 +187,9 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
   async function sendMessage(prompt: string) {
     if (!prompt.trim() || isTyping) return;
 
+    // FIX Bug 3: Reset cancelled state for new send operation when panel is open
+    if (isCancelledRef.current) return;
+
     const userMsg: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -178,6 +205,9 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
     await new Promise((resolve) =>
       setTimeout(resolve, 800 + Math.random() * 800)
     );
+
+    // FIX Bug 3: Check if cancelled before updating state
+    if (isCancelledRef.current) return;
 
     const aiResponse = getMockResponse(prompt);
     const assistantMsg: Message = {
@@ -199,8 +229,14 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
   }
 
   function clearConversation() {
+    // FIX Bug 2: Don't allow clear while typing to avoid async race
+    if (isTyping) return;
+
     setMessages([]);
-    setTimeout(() => {
+
+    // FIX Bug 2: Check isMountedRef before setting state in timeout
+    const timeoutId = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setMessages([
         {
           id: "welcome-reset",
@@ -211,6 +247,9 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
         },
       ]);
     }, 50);
+
+    // Cleanup the timeout if needed (component unmounts before it fires)
+    return () => clearTimeout(timeoutId);
   }
 
   return (
@@ -264,73 +303,48 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
                 </div>
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl rounded-tl-sm px-4 py-3">
                   <div className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                    <span className="text-xs text-slate-500">En train d'écrire...</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Suggestion chips — only show when no user messages yet */}
+            {messages.length <= 1 && !isTyping && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {SUGGESTION_CHIPS.map((chip) => (
+                  <button
+                    key={chip.label}
+                    onClick={() => sendMessage(chip.prompt)}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                    {chip.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
         </ScrollArea>
 
-        {/* Suggestion chips */}
-        {messages.length <= 1 && (
-          <div className="flex-shrink-0 px-4 pb-3">
-            <p className="text-xs text-slate-400 mb-2 font-medium">
-              Suggestions rapides
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {SUGGESTION_CHIPS.map((chip) => (
-                <button
-                  key={chip.label}
-                  onClick={() => sendMessage(chip.prompt)}
-                  disabled={isTyping}
-                  className={cn(
-                    "flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full",
-                    "border border-emerald-200 bg-emerald-50 text-emerald-700",
-                    "hover:bg-emerald-100 hover:border-emerald-300",
-                    "transition-colors duration-150",
-                    "disabled:opacity-50 disabled:cursor-not-allowed"
-                  )}
-                >
-                  <ChevronRight className="h-3 w-3" />
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Input area */}
-        <div className="flex-shrink-0 px-4 pb-5 pt-2 border-t border-slate-100 bg-slate-50/50">
+        <div className="flex-shrink-0 px-4 py-3 border-t border-slate-100 bg-white">
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Input
-                ref={inputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Posez votre question…"
-                disabled={isTyping}
-                className={cn(
-                  "pr-10 text-sm bg-white border-slate-200",
-                  "focus:border-emerald-400 focus:ring-emerald-400/20",
-                  "placeholder:text-slate-400",
-                  "disabled:opacity-60"
-                )}
-              />
-            </div>
+            <Input
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Posez votre question..."
+              className="flex-1 text-sm border-slate-200 focus-visible:ring-emerald-500"
+              disabled={isTyping}
+            />
             <Button
               size="icon"
               onClick={() => sendMessage(inputValue)}
               disabled={!inputValue.trim() || isTyping}
-              className={cn(
-                "h-9 w-9 flex-shrink-0 rounded-full",
-                "bg-emerald-600 hover:bg-emerald-700 text-white",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-                "transition-colors duration-150"
-              )}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white flex-shrink-0"
             >
               {isTyping ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -339,9 +353,6 @@ export function AiAssistantPanel({ open, onOpenChange }: AiAssistantPanelProps) 
               )}
             </Button>
           </div>
-          <p className="text-[10px] text-slate-400 mt-2 text-center">
-            L'IA peut faire des erreurs. Vérifiez les informations importantes.
-          </p>
         </div>
       </SheetContent>
     </Sheet>

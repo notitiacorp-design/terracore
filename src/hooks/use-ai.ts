@@ -21,7 +21,7 @@ export interface WeatherConflict {
 }
 
 export interface FetchProposalsFilters {
-  status?: string;
+  is_accepted?: boolean;
   entity_type?: string;
   agent_type?: AiAgentType;
 }
@@ -76,33 +76,56 @@ export function useAi(): UseAiReturn {
       setError(null);
 
       try {
+        // If filtering by agent_type, fetch matching agent_run IDs first
+        let agentRunIds: string[] | null = null;
+        if (filters?.agent_type) {
+          const { data: runs, error: runsError } = await supabase
+            .from('ai_agent_run')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('agent_type', filters.agent_type);
+
+          if (runsError) {
+            throw new Error(
+              runsError.message || 'Erreur lors du filtrage par type d\'agent'
+            );
+          }
+
+          agentRunIds = (runs ?? []).map((r: { id: string }) => r.id);
+
+          // If no matching agent runs, return early
+          if (agentRunIds.length === 0) {
+            setProposals([]);
+            return [];
+          }
+        }
+
         let query = supabase
           .from('ai_proposal')
           .select(
             `
             *,
-            agent_run:ai_agent_run!ai_proposal_agent_run_id_fkey(
+            agent_run:ai_agent_run(
               id,
               agent_type,
               status,
-              created_at
+              started_at
             )
             `
           )
           .eq('company_id', companyId)
           .order('created_at', { ascending: false });
 
-        if (filters?.status) {
-          query = query.eq('status', filters.status);
+        if (filters?.is_accepted !== undefined) {
+          query = query.eq('is_accepted', filters.is_accepted);
         }
 
         if (filters?.entity_type) {
           query = query.eq('entity_type', filters.entity_type);
         }
 
-        if (filters?.agent_type) {
-          // Filter via joined agent_run -> agent_type
-          query = query.eq('agent_run.agent_type', filters.agent_type);
+        if (agentRunIds !== null) {
+          query = query.in('agent_run_id', agentRunIds);
         }
 
         const { data, error: supaError } = await query;
@@ -145,8 +168,8 @@ export function useAi(): UseAiReturn {
         const { data, error: supaError } = await supabase
           .from('ai_proposal')
           .update({
-            status: 'accepted',
-            reviewed_at: now,
+            is_accepted: true,
+            accepted_at: now,
           })
           .eq('id', id)
           .select()
@@ -193,8 +216,8 @@ export function useAi(): UseAiReturn {
         const { data, error: supaError } = await supabase
           .from('ai_proposal')
           .update({
-            status: 'rejected',
-            reviewed_at: now,
+            is_accepted: false,
+            dismissed_at: now,
           })
           .eq('id', id)
           .select()
@@ -243,7 +266,7 @@ export function useAi(): UseAiReturn {
           .from('ai_agent_run')
           .select('*')
           .eq('company_id', companyId)
-          .order('created_at', { ascending: false });
+          .order('started_at', { ascending: false });
 
         if (agentType) {
           query = query.eq('agent_type', agentType);
@@ -320,7 +343,7 @@ export function useAi(): UseAiReturn {
     async (
       companyId: string,
       text: string,
-      createdBy: string
+      _createdBy: string
     ): Promise<AiAgentRunRow | null> => {
       setLoading(true);
       setError(null);
@@ -337,7 +360,6 @@ export function useAi(): UseAiReturn {
           agent_type: 'devis_assist',
           input_data: { prompt: text.trim() },
           status: 'pending',
-          created_by: createdBy,
         };
 
         const { data: created, error: supaError } = await supabase
@@ -405,7 +427,7 @@ export function useAi(): UseAiReturn {
         const eventIds = [
           ...new Set(
             weatherSnapshots
-              .map((s) => s.schedule_event_id)
+              .map((s) => s.site_address_id)
               .filter((id): id is string => id !== null && id !== undefined)
           ),
         ];
@@ -420,7 +442,7 @@ export function useAi(): UseAiReturn {
           .from('schedule_event')
           .select('*')
           .eq('company_id', companyId)
-          .in('id', eventIds)
+          .in('site_address_id', eventIds)
           .order('start_datetime', { ascending: true });
 
         if (eventsError) {
@@ -433,44 +455,19 @@ export function useAi(): UseAiReturn {
         const scheduleEvents = (events as ScheduleEventRow[]) ?? [];
 
         // Build conflicts: group snapshots by event
+        // Match snapshots to events by site_address_id
         const conflicts: WeatherConflict[] = scheduleEvents.map((event) => {
           const eventSnapshots = weatherSnapshots.filter(
-            (s) => s.schedule_event_id === event.id
+            (s) => s.site_address_id === event.site_address_id
           );
           return { event, snapshots: eventSnapshots };
         });
 
-        // Also include events referenced in snapshots but possibly not matched
-        // (edge case: ensure all snapshot event_ids are covered)
-        const coveredEventIds = new Set(scheduleEvents.map((e) => e.id));
-        const uncoveredSnapshots = weatherSnapshots.filter(
-          (s) =>
-            s.schedule_event_id &&
-            !coveredEventIds.has(s.schedule_event_id)
-        );
+        // Filter out events with no matching snapshots
+        const filteredConflicts = conflicts.filter((c) => c.snapshots.length > 0);
 
-        if (uncoveredSnapshots.length > 0) {
-          const uncoveredEventIds = [
-            ...new Set(uncoveredSnapshots.map((s) => s.schedule_event_id!)),
-          ];
-
-          const { data: extraEvents } = await supabase
-            .from('schedule_event')
-            .select('*')
-            .in('id', uncoveredEventIds);
-
-          if (extraEvents && extraEvents.length > 0) {
-            for (const extraEvent of extraEvents as ScheduleEventRow[]) {
-              const extraSnapshots = uncoveredSnapshots.filter(
-                (s) => s.schedule_event_id === extraEvent.id
-              );
-              conflicts.push({ event: extraEvent, snapshots: extraSnapshots });
-            }
-          }
-        }
-
-        setWeatherConflicts(conflicts);
-        return conflicts;
+        setWeatherConflicts(filteredConflicts);
+        return filteredConflicts;
       } catch (err) {
         const message =
           err instanceof Error
