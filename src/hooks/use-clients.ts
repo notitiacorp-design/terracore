@@ -158,7 +158,7 @@ export function useClients(): UseClientsReturn {
           .select('*')
           .eq('company_id', companyId)
           .or(`company_name.ilike.${term},email.ilike.${term}`)
-          .order('name', { ascending: true })
+          .order('company_name', { ascending: true })
           .limit(20);
 
         if (searchError) return [];

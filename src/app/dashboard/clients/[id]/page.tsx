@@ -111,7 +111,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setNotes(notesRes.data ?? []);
       } catch (err) {
         toast.error("Impossible de charger le client");
-        router.push("/clients");
+        router.push("/dashboard/clients");
       } finally {
         setIsLoading(false);
       }
@@ -169,7 +169,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8">
       {/* Back */}
-      <Button variant="ghost" size="sm" className="w-fit gap-2" onClick={() => router.push("/clients")}>
+      <Button variant="ghost" size="sm" className="w-fit gap-2" onClick={() => router.push("/dashboard/clients")}>
         <ArrowLeft className="h-4 w-4" />
         Retour aux clients
       </Button>

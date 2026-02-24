@@ -137,7 +137,7 @@ export default function ClientsPage() {
           </p>
         </div>
         <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-          <Link href="/clients/nouveau">
+          <Link href="/dashboard/clients/nouveau">
             <Plus className="h-4 w-4" />
             Nouveau client
           </Link>
@@ -191,7 +191,7 @@ export default function ClientsPage() {
                         <p className="text-sm text-muted-foreground/70 mt-1">Créez votre premier client pour commencer</p>
                       </div>
                       <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-                        <Link href="/clients/nouveau"><Plus className="h-4 w-4" />Nouveau client</Link>
+                        <Link href="/dashboard/clients/nouveau"><Plus className="h-4 w-4" />Nouveau client</Link>
                       </Button>
                     </div>
                   </TableCell>
@@ -253,7 +253,7 @@ export default function ClientsPage() {
                 <p className="text-sm text-muted-foreground/70 mt-1">Créez votre premier client pour commencer</p>
               </div>
               <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-                <Link href="/clients/nouveau"><Plus className="h-4 w-4" />Nouveau client</Link>
+                <Link href="/dashboard/clients/nouveau"><Plus className="h-4 w-4" />Nouveau client</Link>
               </Button>
             </div>
           )

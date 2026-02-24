@@ -14,7 +14,9 @@ import type {
 export interface QuoteWithClient extends QuoteRow {
   client: {
     id: string;
-    name: string;
+    company_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
     email: string | null;
   } | null;
 }
@@ -22,7 +24,9 @@ export interface QuoteWithClient extends QuoteRow {
 export interface InvoiceWithClient extends InvoiceRow {
   client: {
     id: string;
-    name: string;
+    company_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
     email: string | null;
   } | null;
 }
@@ -65,9 +69,11 @@ export function useDocuments(): UseDocumentsReturn {
           .from('quote')
           .select(`
             *,
-            client:clients!quotes_client_id_fkey (
+            client:client (
               id,
-              name,
+              company_name,
+              first_name,
+              last_name,
               email
             )
           `)
@@ -106,9 +112,11 @@ export function useDocuments(): UseDocumentsReturn {
           .from('invoice')
           .select(`
             *,
-            client:clients!invoices_client_id_fkey (
+            client:client (
               id,
-              name,
+              company_name,
+              first_name,
+              last_name,
               email
             )
           `)
@@ -199,7 +207,7 @@ export function useDocuments(): UseDocumentsReturn {
     return quotes.reduce(
       (acc, quote) => ({
         totalHT: acc.totalHT + (quote.total_ht ?? 0),
-        totalVAT: acc.totalVAT + (quote.total_vat ?? 0),
+        totalVAT: acc.totalVAT + (quote.total_tva ?? 0),
         totalTTC: acc.totalTTC + (quote.total_ttc ?? 0),
         count: acc.count + 1,
       }),
@@ -211,7 +219,7 @@ export function useDocuments(): UseDocumentsReturn {
     return invoices.reduce(
       (acc, invoice) => ({
         totalHT: acc.totalHT + (invoice.total_ht ?? 0),
-        totalVAT: acc.totalVAT + (invoice.total_vat ?? 0),
+        totalVAT: acc.totalVAT + (invoice.total_tva ?? 0),
         totalTTC: acc.totalTTC + (invoice.total_ttc ?? 0),
         count: acc.count + 1,
       }),

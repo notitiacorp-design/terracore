@@ -29,7 +29,7 @@ export default function NouveauClientPage() {
         variant="ghost"
         size="sm"
         className="w-fit gap-2"
-        onClick={() => router.push("/clients")}
+        onClick={() => router.push("/dashboard/clients")}
       >
         <ArrowLeft className="h-4 w-4" />
         Retour aux clients

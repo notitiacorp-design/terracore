@@ -56,21 +56,12 @@ interface KPIData {
 interface ScheduleEvent {
   id: string;
   title: string;
-  start_time: string;
-  end_time: string;
-  client_name: string;
-  site_address: string;
-  status: "planifié" | "en_cours" | "terminé" | "annulé";
-  employees: {
-    id: string;
-    name: string;
-    avatar?: string;
-  }[];
-  weather?: {
-    temp: number;
-    condition: string;
-    icon: string;
-  };
+  start_datetime: string;
+  end_datetime: string;
+  event_type: string;
+  client_id?: string | null;
+  site_address_id?: string | null;
+  description?: string | null;
 }
 
 interface AIProposal {
@@ -86,9 +77,12 @@ interface ActivityEntry {
   id: string;
   action: string;
   entity_type: string;
-  entity_label: string;
+  entity_id: string;
   created_at: string;
-  user_name?: string;
+  user?: {
+    first_name: string;
+    last_name: string;
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -117,44 +111,32 @@ const MOCK_EVENTS: ScheduleEvent[] = [
   {
     id: "1",
     title: "Taille de haies - Résidence Bellevue",
-    start_time: "2024-06-20T08:00:00",
-    end_time: "2024-06-20T12:00:00",
-    client_name: "M. Dupont",
-    site_address: "12 Rue des Fleurs, Lyon",
-    status: "en_cours",
-    employees: [
-      { id: "1", name: "Jean Martin" },
-      { id: "2", name: "Paul Durand" },
-    ],
-    weather: { temp: 22, condition: "Ensoleillé", icon: "☀️" },
+    start_datetime: "2024-06-20T08:00:00",
+    end_datetime: "2024-06-20T12:00:00",
+    event_type: "intervention",
+    client_id: "client-1",
+    site_address_id: "addr-1",
+    description: "Taille de haies",
   },
   {
     id: "2",
     title: "Tonte pelouse + désherbage",
-    start_time: "2024-06-20T13:30:00",
-    end_time: "2024-06-20T17:00:00",
-    client_name: "Mme Leclerc",
-    site_address: "45 Allée des Roses, Villeurbanne",
-    status: "planifié",
-    employees: [
-      { id: "3", name: "Sophie Bernard" },
-    ],
-    weather: { temp: 24, condition: "Partiellement nuageux", icon: "⛅" },
+    start_datetime: "2024-06-20T13:30:00",
+    end_datetime: "2024-06-20T17:00:00",
+    event_type: "intervention",
+    client_id: "client-2",
+    site_address_id: "addr-2",
+    description: "Tonte pelouse",
   },
   {
     id: "3",
     title: "Installation système d'arrosage",
-    start_time: "2024-06-20T09:00:00",
-    end_time: "2024-06-20T11:30:00",
-    client_name: "SCI Les Jardins",
-    site_address: "8 Boulevard Carnot, Bron",
-    status: "terminé",
-    employees: [
-      { id: "1", name: "Jean Martin" },
-      { id: "4", name: "Lucas Petit" },
-      { id: "5", name: "Emma Roux" },
-    ],
-    weather: { temp: 20, condition: "Nuageux", icon: "☁️" },
+    start_datetime: "2024-06-20T09:00:00",
+    end_datetime: "2024-06-20T11:30:00",
+    event_type: "intervention",
+    client_id: "client-3",
+    site_address_id: "addr-3",
+    description: "Installation arrosage",
   },
 ];
 
@@ -193,41 +175,41 @@ const MOCK_ACTIVITY: ActivityEntry[] = [
     id: "1",
     action: "create",
     entity_type: "devis",
-    entity_label: "Devis #DEV-2024-094 créé pour Mme Laurent",
+    entity_id: "DEV-2024-094",
     created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    user_name: "Sophie Bernard",
+    user: { first_name: "Sophie", last_name: "Bernard" },
   },
   {
     id: "2",
     action: "update",
     entity_type: "facture",
-    entity_label: "Facture #FAC-2024-047 marquée comme payée",
+    entity_id: "FAC-2024-047",
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    user_name: "Jean Martin",
+    user: { first_name: "Jean", last_name: "Martin" },
   },
   {
     id: "3",
     action: "create",
     entity_type: "chantier",
-    entity_label: "Nouveau chantier ouvert — Résidence du Parc",
+    entity_id: "CHANT-001",
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    user_name: "Admin",
+    user: { first_name: "Admin", last_name: "" },
   },
   {
     id: "4",
     action: "update",
     entity_type: "client",
-    entity_label: "Fiche client M. Moreau mise à jour",
+    entity_id: "CLI-042",
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    user_name: "Paul Durand",
+    user: { first_name: "Paul", last_name: "Durand" },
   },
   {
     id: "5",
     action: "delete",
     entity_type: "planification",
-    entity_label: "Intervention annulée — Chantier Lacroix",
+    entity_id: "PLAN-007",
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-    user_name: "Jean Martin",
+    user: { first_name: "Jean", last_name: "Martin" },
   },
 ];
 
@@ -248,6 +230,21 @@ function formatTime(iso: string): string {
 
 function relativeTime(iso: string): string {
   return formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: fr });
+}
+
+function getActivityLabel(entry: ActivityEntry): string {
+  const actionMap: Record<string, string> = {
+    create: "Création",
+    update: "Mise à jour",
+    delete: "Suppression",
+  };
+  const action = actionMap[entry.action] ?? entry.action;
+  return `${action} — ${entry.entity_type} #${entry.entity_id}`;
+}
+
+function getUserDisplayName(user?: { first_name: string; last_name: string }): string {
+  if (!user) return "Système";
+  return `${user.first_name} ${user.last_name}`.trim() || "Système";
 }
 
 // ─────────────────────────────────────────────
@@ -380,29 +377,26 @@ function KPICard({
 }
 
 /** Status badge helper */
-function StatusBadge({ status }: { status: ScheduleEvent["status"] }) {
-  const config: Record<
-    string,
-    { label: string; className: string }
-  > = {
-    planifié: {
-      label: "Planifié",
+function EventTypeBadge({ event_type }: { event_type: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    intervention: {
+      label: "Intervention",
       className: "bg-blue-100 text-blue-700",
     },
-    en_cours: {
-      label: "En cours",
+    rdv: {
+      label: "RDV",
       className: "bg-emerald-100 text-emerald-700",
     },
-    terminé: {
-      label: "Terminé",
+    livraison: {
+      label: "Livraison",
+      className: "bg-amber-100 text-amber-700",
+    },
+    autre: {
+      label: "Autre",
       className: "bg-gray-100 text-gray-600",
     },
-    annulé: {
-      label: "Annulé",
-      className: "bg-red-100 text-red-700",
-    },
   };
-  const c = config[status] || config["planifié"];
+  const c = config[event_type] ?? config["autre"];
   return (
     <span
       className={cn(
@@ -459,11 +453,11 @@ function TodaySchedule({
           {/* Time column */}
           <div className="flex flex-col items-center justify-center w-14 flex-shrink-0">
             <span className="text-sm font-bold text-gray-900">
-              {formatTime(event.start_time)}
+              {formatTime(event.start_datetime)}
             </span>
             <span className="text-xs text-gray-400">—</span>
             <span className="text-xs text-gray-500">
-              {formatTime(event.end_time)}
+              {formatTime(event.end_datetime)}
             </span>
           </div>
 
@@ -476,53 +470,29 @@ function TodaySchedule({
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {event.title}
               </p>
-              <StatusBadge status={event.status} />
+              <EventTypeBadge event_type={event.event_type} />
             </div>
 
-            <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-              <User className="w-3 h-3 flex-shrink-0" />
-              <span>{event.client_name}</span>
-            </div>
-
-            <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
-              <MapPin className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{event.site_address}</span>
-            </div>
-
-            <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
-              {/* Avatar stack */}
-              <div className="flex items-center">
-                <div className="flex -space-x-2">
-                  {event.employees.slice(0, 3).map((emp) => (
-                    <Avatar
-                      key={emp.id}
-                      className="w-6 h-6 border-2 border-white"
-                    >
-                      <AvatarImage src={emp.avatar} />
-                      <AvatarFallback className="text-[9px] bg-emerald-500 text-white">
-                        {emp.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                  {event.employees.length > 3 && (
-                    <div className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center">
-                      <span className="text-[9px] text-gray-600 font-medium">
-                        +{event.employees.length - 3}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <span className="ml-2 text-xs text-gray-400">
-                  {event.employees.length} agent{event.employees.length > 1 ? "s" : ""}
-                </span>
+            {event.description && (
+              <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                <FileText className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{event.description}</span>
               </div>
+            )}
 
-              {/* Weather */}
-              {event.weather && <WeatherBadge weather={event.weather} />}
-            </div>
+            {event.client_id && (
+              <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+                <User className="w-3 h-3 flex-shrink-0" />
+                <span>{event.client_id}</span>
+              </div>
+            )}
+
+            {event.site_address_id && (
+              <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+                <MapPin className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{event.site_address_id}</span>
+              </div>
+            )}
           </div>
         </div>
       ))}
@@ -627,7 +597,7 @@ function ActivityTimeline({
   entries,
   loading,
 }: {
-  entries: ActivityEntry[];
+  entries: AuditEntry[];
   loading: boolean;
 }) {
   const actionConfig: Record<
@@ -682,6 +652,11 @@ function ActivityTimeline({
         {entries.map((entry) => {
           const config =
             actionConfig[entry.action] || actionConfig["update"];
+          const entityLabel = `${entry.entity_type} #${entry.entity_id?.slice(0, 8) ?? ""}`;
+          const userName =
+            entry.user
+              ? `${entry.user.first_name ?? ""} ${entry.user.last_name ?? ""}`.trim()
+              : undefined;
           return (
             <div key={entry.id} className="flex gap-3 relative">
               <div
@@ -694,12 +669,12 @@ function ActivityTimeline({
               </div>
               <div className="flex-1 min-w-0 pb-1">
                 <p className="text-sm text-gray-800 leading-snug">
-                  {entry.entity_label}
+                  {entityLabel}
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  {entry.user_name && (
+                  {userName && (
                     <span className="text-xs text-gray-400">
-                      {entry.user_name}
+                      {userName}
                     </span>
                   )}
                   <span className="text-xs text-gray-400">·</span>
@@ -726,7 +701,7 @@ export default function DashboardPage() {
   const [kpi, setKpi] = useState<KPIData | null>(null);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [proposals, setProposals] = useState<AIProposal[]>(MOCK_PROPOSALS);
-  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [activity, setActivity] = useState<AuditEntry[]>([]);
 
   const [loadingKpi, setLoadingKpi] = useState(true);
   const [loadingEvents, setLoadingEvents] = useState(true);
@@ -865,18 +840,14 @@ export default function DashboardPage() {
         .from("schedule_event")
         .select(
           `
-          id, title, start_time, end_time, status,
-          clients(name),
-          sites(address),
-          schedule_event_employees(
-            employees(id, full_name, avatar_url)
-          )
+          id, title, start_datetime, end_datetime, event_type,
+          client_id, site_address_id, description
         `
         )
         .eq("company_id", companyId)
-        .gte("start_time", todayStart.toISOString())
-        .lte("start_time", todayEnd.toISOString())
-        .order("start_time");
+        .gte("start_datetime", todayStart.toISOString())
+        .lte("start_datetime", todayEnd.toISOString())
+        .order("start_datetime");
 
       if (error || !data || data.length === 0) {
         setEvents(MOCK_EVENTS);
@@ -886,18 +857,12 @@ export default function DashboardPage() {
       const mapped: ScheduleEvent[] = data.map((e: any) => ({
         id: e.id,
         title: e.title,
-        start_time: e.start_time,
-        end_time: e.end_time,
-        client_name: e.clients?.name || "Client inconnu",
-        site_address: e.sites?.address || "Adresse inconnue",
-        status: e.status || "planifié",
-        employees:
-          e.schedule_event_employees?.map((see: any) => ({
-            id: see.employees?.id,
-            name: see.employees?.full_name || "Agent",
-            avatar: see.employees?.avatar_url,
-          })) || [],
-        weather: undefined,
+        start_datetime: e.start_datetime,
+        end_datetime: e.end_datetime,
+        event_type: e.event_type,
+        client_id: e.client_id,
+        site_address_id: e.site_address_id,
+        description: e.description,
       }));
 
       setEvents(mapped);
@@ -921,7 +886,7 @@ export default function DashboardPage() {
       const { data, error } = await supabase
         .from("audit_log")
         .select(
-          "id, action, entity_type, entity_label, created_at, profiles(full_name)"
+          "id, action, entity_type, entity_id, created_at, user:profiles(first_name, last_name)"
         )
         .eq("company_id", companyId)
         .order("created_at", { ascending: false })
@@ -932,13 +897,18 @@ export default function DashboardPage() {
         return;
       }
 
-      const mapped: ActivityEntry[] = data.map((log: any) => ({
+      const mapped: AuditEntry[] = data.map((log: any) => ({
         id: log.id,
         action: log.action,
         entity_type: log.entity_type,
-        entity_label: log.entity_label || `${log.entity_type} modifié`,
+        entity_id: log.entity_id,
         created_at: log.created_at,
-        user_name: log.profiles?.full_name || undefined,
+        user: log.user
+          ? {
+              first_name: log.user.first_name ?? undefined,
+              last_name: log.user.last_name ?? undefined,
+            }
+          : undefined,
       }));
 
       setActivity(mapped);

@@ -22,12 +22,11 @@ import { cn } from "@/lib/utils";
 interface AuditEntry {
   id: string;
   action: string;
-  table_name: string;
-  record_id?: string;
+  entity_type: string;
+  entity_id?: string;
   user_id?: string;
-  description?: string;
   created_at: string;
-  user?: { email?: string; full_name?: string };
+  user_profile?: { first_name?: string; last_name?: string };
 }
 
 const ACTION_CONFIG: Record<
@@ -127,18 +126,18 @@ export function ActivityTimeline() {
             `
             id,
             action,
-            table_name,
-            record_id,
+            entity_type,
+            entity_id,
             user_id,
-            description,
-            created_at
+            created_at,
+            user_profile:user_profile!user_id(first_name, last_name)
           `
           )
           .order("created_at", { ascending: false })
           .limit(10);
 
         if (fetchError) throw fetchError;
-        setEntries(data || []);
+        setEntries((data as unknown as AuditEntry[]) || []);
       } catch (err: any) {
         console.error("Erreur chargement audit:", err);
         setError("Impossible de charger l'activité récente.");
@@ -173,7 +172,7 @@ export function ActivityTimeline() {
             <div className="absolute left-3 top-0 bottom-0 w-px bg-slate-100" />
 
             <div className="space-y-1">
-              {entries.map((entry, idx) => {
+              {entries.map((entry) => {
                 const config =
                   ACTION_CONFIG[entry.action] || {
                     icon: Activity,
@@ -183,16 +182,26 @@ export function ActivityTimeline() {
                   };
                 const IconComp = config.icon;
                 const tableLabel =
-                  TABLE_LABELS[entry.table_name] || entry.table_name;
+                  TABLE_LABELS[entry.entity_type] || entry.entity_type;
 
                 const timeAgo = formatDistanceToNow(
                   new Date(entry.created_at),
                   { addSuffix: true, locale: fr }
                 );
 
-                const desc =
-                  entry.description ||
-                  `${config.label} — ${tableLabel}`;
+                const userName =
+                  entry.user_profile?.first_name || entry.user_profile?.last_name
+                    ? [
+                        entry.user_profile?.first_name,
+                        entry.user_profile?.last_name,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")
+                    : null;
+
+                const desc = userName
+                  ? `${config.label} — ${tableLabel} par ${userName}`
+                  : `${config.label} — ${tableLabel}`;
 
                 return (
                   <div
