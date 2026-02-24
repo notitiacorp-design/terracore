@@ -182,8 +182,9 @@ export default function DocumentsPage() {
     setLoadingDeposits(true);
     try {
       let query = supabase
-        .from('deposit_invoice').select('*, invoice(*, client(id, company_name, first_name, last_name))')')
-        .eq('company_id', companyId)
+        .from('deposit_invoice')
+        .select('*, invoice!inner(*, client(id, company_name, first_name, last_name))')
+        .eq('invoice.company_id', companyId)
         .order('created_at', { ascending: false });
 
       if (search.trim()) {

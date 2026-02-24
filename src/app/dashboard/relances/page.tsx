@@ -279,7 +279,7 @@ export default function RelancesPage() {
         `
         )
         .eq('is_active', true)
-        .order('next_reminder_at', { ascending: true });
+        .order('last_action_at', { ascending: true });
 
       if (error) throw error;
       setWorkflows((data as unknown as WorkflowWithRelations[]) ?? []);
@@ -344,7 +344,7 @@ export default function RelancesPage() {
           .update({
             is_active: false,
             stopped_at: new Date().toISOString(),
-            stopped_reason: 'Arrêt manuel par utilisateur',
+            stop_reason: 'Arrêt manuel par utilisateur',
           })
           .eq('id', wf.id);
         if (error) throw error;
@@ -370,7 +370,7 @@ export default function RelancesPage() {
       try {
         const nextLevel = getNextLevel(wf.current_level as ReminderLevel);
         const { error } = await supabase.from('reminder_message').insert({
-          workflow_id: wf.id,
+          reminder_workflow_id: wf.id,
           level: nextLevel ?? wf.current_level,
           channel: 'email',
           subject: `Relance ${LEVEL_CONFIG[nextLevel ?? (wf.current_level as ReminderLevel)]?.label} – Facture ${wf.invoice?.reference ?? ''}`,
@@ -385,8 +385,7 @@ export default function RelancesPage() {
             .from('reminder_workflow')
             .update({
               current_level: nextLevel,
-              next_reminder_at: getNextReminderDate(nextLevel),
-              updated_at: new Date().toISOString(),
+              last_action_at: new Date().toISOString(),
             })
             .eq('id', wf.id);
         }
@@ -414,10 +413,10 @@ export default function RelancesPage() {
       try {
         const { error } = await supabase
           .from('reminder_workflow')
-          .update({ auto_send: !wf.auto_send, updated_at: new Date().toISOString() })
+          .update({ is_active: !wf.is_active })
           .eq('id', wf.id);
         if (error) throw error;
-        toast.success(`Envoi automatique ${!wf.auto_send ? 'activé' : 'désactivé'}.`);
+        toast.success(`Envoi automatique ${!wf.is_active ? 'activé' : 'désactivé'}.`);
         await fetchWorkflows();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -654,13 +653,13 @@ export default function RelancesPage() {
                             <LevelBadge level={level} />
                           </TableCell>
                           <TableCell className="text-white/60 text-sm">
-                            {wf.next_reminder_at
-                              ? formatDate(wf.next_reminder_at)
+                            {wf.last_action_at
+                              ? formatDate(wf.last_action_at)
                               : '—'}
                           </TableCell>
                           <TableCell>
                             <Switch
-                              checked={wf.auto_send ?? false}
+                              checked={wf.is_active ?? false}
                               onCheckedChange={() => handleToggleAutoSend(wf)}
                               disabled={togglingId === wf.id}
                               className="data-[state=checked]:bg-emerald-500"
@@ -951,7 +950,7 @@ export default function RelancesPage() {
                       </span>
                     </div>
                     <Switch
-                      checked={selectedWorkflow.auto_send ?? false}
+                      checked={selectedWorkflow.is_active ?? false}
                       onCheckedChange={() => handleToggleAutoSend(selectedWorkflow)}
                       disabled={togglingId === selectedWorkflow.id}
                       className="data-[state=checked]:bg-emerald-500"
@@ -1062,16 +1061,4 @@ function getNextLevel(current: ReminderLevel): ReminderLevel | null {
   return order[idx + 1];
 }
 
-function getNextReminderDate(level: ReminderLevel): string {
-  const daysMap: Record<ReminderLevel, number> = {
-    relance_1: 7,
-    relance_2: 14,
-    relance_3: 14,
-    mise_en_demeure: 15,
-    contentieux: 30,
-  };
-  const days = daysMap[level] ?? 7;
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
-}
+

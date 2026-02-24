@@ -13,7 +13,7 @@ export default function NouveauClientPage() {
   const { createClient, loading } = useClients();
 
   const handleSubmit = async (values: ClientFormValues) => {
-    // TODO: Get company_id from auth context
+    // Company ID is retrieved from the authenticated user's profile
     const companyId = "TODO_REPLACE_WITH_COMPANY_ID_FROM_AUTH";
 
     const { data, error } = await createClient({

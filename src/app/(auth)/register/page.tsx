@@ -348,7 +348,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() =>
-                setValue("acceptTerms", acceptTermsValue ? (false as any) : true, {
+                setValue("acceptTerms", acceptTermsValue ? false : true, {
                   shouldValidate: true,
                 })
               }
@@ -364,7 +364,7 @@ export default function RegisterPage() {
               <span className="text-sm text-zinc-400">
                 J&apos;accepte les{" "}
                 <Link
-                  href="/terms"
+                  href="#"
                   className="text-emerald-400 hover:text-emerald-300 hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -372,7 +372,7 @@ export default function RegisterPage() {
                 </Link>{" "}
                 et la{" "}
                 <Link
-                  href="/privacy"
+                  href="#"
                   className="text-emerald-400 hover:text-emerald-300 hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >

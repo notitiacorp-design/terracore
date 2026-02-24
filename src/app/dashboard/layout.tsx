@@ -498,7 +498,7 @@ export default function DashboardLayout({
             )
           `
           )
-          .eq('auth_user_id', user.id)
+          .eq('id', user.id)
           .single();
 
         if (profileError) {

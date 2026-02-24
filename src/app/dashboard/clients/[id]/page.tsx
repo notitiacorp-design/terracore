@@ -94,7 +94,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
             supabase.from("site_address").select("*").eq("client_id", id).order("is_billing_address", { ascending: false }),
             supabase.from("document_attachment").select("*").eq("entity_type", "client").eq("entity_id", id).order("created_at", { ascending: false }),
             supabase.from("schedule_event").select("*").eq("client_id", id).order("start_datetime", { ascending: false }),
-            supabase.from("reminder_workflow").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+            supabase.from("reminder_workflow").select("*").eq("client_id", id).order("started_at", { ascending: false }),
             supabase.from("audit_log").select("*").eq("entity_type", "client").eq("entity_id", id).order("created_at", { ascending: false }),
           ]);
 
