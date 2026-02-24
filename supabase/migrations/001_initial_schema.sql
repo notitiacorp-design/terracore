@@ -44,15 +44,20 @@ $$;
 -- Function: get_user_company_id
 CREATE OR REPLACE FUNCTION get_user_company_id()
 RETURNS uuid
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT company_id
+DECLARE
+  v_company_id uuid;
+BEGIN
+  SELECT company_id INTO v_company_id
   FROM public.user_profile
   WHERE id = auth.uid()
   LIMIT 1;
+  RETURN v_company_id;
+END;
 $$;
 
 -- Function: update_invoice_remaining
@@ -117,7 +122,7 @@ BEGIN
     SET
       is_active = FALSE,
       stopped_at = NOW(),
-      stop_reason = 'Facture payée intégralement'
+      stop_reason = 'Facture payÃ©e intÃ©gralement'
     WHERE invoice_id = NEW.invoice_id
       AND is_active = TRUE;
   END IF;
