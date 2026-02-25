@@ -374,7 +374,7 @@ export default function DashboardPage() {
         client_name: ev.client
           ? ev.client.company_name || `${ev.client.first_name || ''} ${ev.client.last_name || ''}`.trim()
           : undefined,
-        weather: (weatherToday || []).find((w) => w.schedule_event_id === ev.id) || null,
+        weather: (weatherToday || []).find((w) => w.site_address_id === ev.site_address_id) || null,
       }));
 
       // 2. Retards
@@ -468,16 +468,16 @@ export default function DashboardPage() {
       // FIX #6: Do NOT select 'user_name' from audit_log; join user_profile via user_id
       const { data: auditRaw } = await supabase
         .from('audit_log')
-        .select('id, action, entity_type, entity_id, created_at, user_id, user_profile:user_id(first_name, last_name)')
+        .select('id, action, entity_type, entity_id, created_at, user_id')
         .eq('company_id', cid)
         .order('created_at', { ascending: false })
         .limit(20);
 
       const activityEntries: ActivityEntry[] = (auditRaw || []).map((log: any) => {
-        const profile = log.user_profile;
-        const user_name = profile
-          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || undefined
-          : undefined;
+        const user_name = undefined; // user_id FK -> auth.users, not user_profile; skip join
+
+
+
         return {
           id: log.id,
           action: log.action,
