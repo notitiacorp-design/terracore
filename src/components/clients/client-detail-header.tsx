@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Database } from "@/types/database";
 
-type Client = Database["public"]["Tables"]["clients"]["Row"];
+type Client = Database["public"]["Tables"]["client"]["Row"];
 
 interface ClientDetailHeaderProps {
   client: Client;
@@ -15,12 +15,12 @@ interface ClientDetailHeaderProps {
 
 const TYPE_LABELS: Record<string, string> = {
   particulier: "Particulier",
-  professionnel: "Professionnel",
+  pro: "Professionnel",
 };
 
 const TYPE_COLORS: Record<string, string> = {
   particulier: "bg-blue-100 text-blue-800 border-blue-200",
-  professionnel: "bg-purple-100 text-purple-800 border-purple-200",
+  pro: "bg-purple-100 text-purple-800 border-purple-200",
 };
 
 function getInitials(client: Client): string {

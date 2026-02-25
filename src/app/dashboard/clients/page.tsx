@@ -26,6 +26,12 @@ type Client = ClientRow;
 
 const PAGE_SIZE = 10;
 
+function getClientDisplayName(c: Client): string {
+  if (c.client_type === 'pro' && c.company_name) return c.company_name;
+  return [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
+}
+
+
 const TYPE_LABELS: Record<string, string> = {
   particulier: "Particulier",
   pro: "Professionnel",
@@ -78,7 +84,7 @@ export default function ClientsPage() {
       const q = search.toLowerCase();
       list = list.filter(
         (c) =>
-          c.name?.toLowerCase().includes(q) ||
+          getClientDisplayName(c).toLowerCase().includes(q) ||
           c.email?.toLowerCase().includes(q) ||
           c.phone?.toLowerCase().includes(q) ||
           c.company_name?.toLowerCase().includes(q)
@@ -197,10 +203,10 @@ export default function ClientsPage() {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback className="text-xs">
-                          {getInitials(client.name)}
+                          {getInitials(getClientDisplayName(client))}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">{client.name ?? "—"}</span>
+                      <span className="font-medium">{getClientDisplayName(client)}</span>
                     </div>
                   </TableCell>
                   <TableCell>

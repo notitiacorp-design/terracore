@@ -6,15 +6,20 @@ import { Button } from "@/components/ui/button";
 import { ClientForm } from "@/components/clients/client-form";
 import { useClients } from "@/hooks/use-clients";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 import type { ClientFormValues } from "@/components/clients/client-form";
 
 export default function NouveauClientPage() {
   const router = useRouter();
   const { createClient, loading } = useClients();
+  const { company } = useAuth();
 
   const handleSubmit = async (values: ClientFormValues) => {
-    // Company ID is retrieved from the authenticated user's profile
-    const companyId = "TODO_REPLACE_WITH_COMPANY_ID_FROM_AUTH";
+    if (!company?.id) {
+      toast.error("Erreur : entreprise non trouvée. Reconnectez-vous.");
+      return;
+    }
+    const companyId = company.id;
 
     const { data, error } = await createClient({
       client_type: values.client_type,
@@ -23,7 +28,6 @@ export default function NouveauClientPage() {
       last_name: values.last_name,
       email: values.email,
       phone: values.phone,
-      website: values.website,
       notes: values.notes,
       company_id: companyId,
     });

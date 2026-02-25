@@ -112,7 +112,8 @@ function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message:
 
 export default function DocumentsPage() {
   const router = useRouter();
-  const { user, companyId } = useAuth();
+  const { company } = useAuth();
+  const companyId = company?.id;
 
   const [activeTab, setActiveTab] = useState('devis');
   const [search, setSearch] = useState('');
