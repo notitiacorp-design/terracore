@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { ClientRow, ClientInsert, ClientUpdate, ClientType } from '@/types/database';
 
 export interface ClientFilters {
@@ -22,7 +22,7 @@ export interface UseClientsReturn {
 }
 
 export function useClients(): UseClientsReturn {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createSupabaseClient(), []);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -57,13 +57,14 @@ export function useClients(): UseClientsReturn {
 
         if (fetchError) {
           setError(fetchError.message);
-          setClients([]);
-        } else {
-          setClients((data as ClientRow[]) ?? []);
+          return;
         }
+
+        setClients((data as ClientRow[]) ?? []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur lors du chargement des clients.');
-        setClients([]);
+        setError(
+          err instanceof Error ? err.message : 'Erreur lors du chargement des clients.'
+        );
       } finally {
         setLoading(false);
       }
